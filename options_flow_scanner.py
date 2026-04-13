@@ -16,6 +16,8 @@ from sheets import store_results
 # ── Watchlist ────────────────────────────────────────────────────────────────
 INDEX_ETFS = ["SPY", "QQQ", "IWM"]          # S&P 500, Nasdaq, Russell 2000
 
+SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "GLD", "TLT"]  # Tech, Finance, Energy, Health, Gold, Bonds
+
 PORTFOLIO   = [                              # your holdings
     "MSFT", "NVDA", "AMZN", "META", "TSLA",
     "PLTR", "CRWV", "IONQ", "OKLO", "ACHR",
@@ -25,7 +27,9 @@ PORTFOLIO   = [                              # your holdings
 
 MEGA_CAPS   = ["AAPL", "GOOGL", "MSFT", "NVDA", "AMZN", "META", "TSLA"]
 
-ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + PORTFOLIO + MEGA_CAPS))  # deduped
+HIGH_VOL    = ["AMD", "COIN", "MSTR", "HOOD", "SMCI", "ARM", "SNOW"]  # high options activity
+
+ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + SECTOR_ETFS + MEGA_CAPS + HIGH_VOL + PORTFOLIO))  # deduped
 
 # ── Thresholds (based on Unusual Whales best practices) ──────────────────────
 UNUSUAL_VOL_OI_RATIO = 1.0    # vol > OI = new positions (UW standard minimum)
@@ -192,7 +196,17 @@ def format_report(results: list) -> str:
         market_sig = interpret_signal(spy)
         lines.append(f"*Market Mood:* {market_sig}")
         lines.append(f"SPY P/C `{spy['pc_ratio']}` | QQQ P/C `{qqq['pc_ratio']}`")
-        lines.append("")
+
+    # Sector ETF snapshot
+    sector_line = []
+    for sym in ["XLK", "XLF", "XLE", "GLD", "TLT"]:
+        r = next((x for x in results if x["symbol"] == sym), None)
+        if r and r["pc_ratio"]:
+            sig = "🟢" if r["pc_ratio"] < 0.7 else ("🔴" if r["pc_ratio"] > 1.5 else "🟡")
+            sector_line.append(f"{sym} {sig}{r['pc_ratio']}")
+    if sector_line:
+        lines.append("  ".join(sector_line))
+    lines.append("")
 
     # ── Top smart money flows ──
     all_unusual = []
