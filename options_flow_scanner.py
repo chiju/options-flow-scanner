@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from alpaca.data.historical import OptionHistoricalDataClient
 from alpaca.data.requests import OptionChainRequest
 import requests
+from sheets import store_results
 
 # ── Watchlist ────────────────────────────────────────────────────────────────
 INDEX_ETFS = ["SPY", "QQQ", "IWM"]          # S&P 500, Nasdaq, Russell 2000
@@ -258,6 +259,12 @@ def run_scan():
 
     report = format_report(results)
     send_telegram(report)
+
+    # Store to Google Sheets
+    spy = next((r for r in results if r["symbol"] == "SPY"), None)
+    mood = interpret_signal(spy) if spy else "⚪"
+    store_results(results, mood)
+
     print("✅ Report sent.")
 
 
