@@ -35,11 +35,13 @@ UNUSUAL_THRESHOLD_K = 5000  # $5M+ goes to UNUSUAL_ALERTS
 
 
 def _creds():
+    key_file = os.path.expanduser("~/Desktop/down/yahoo-portfolio-data-44dbe4ae4313.json")
     raw = os.environ.get("GOOGLE_CREDENTIALS", "")
-    if not raw:
-        raise ValueError("GOOGLE_CREDENTIALS env var not set")
-    info = json.loads(raw)
-    return Credentials.from_service_account_info(info, scopes=SCOPES)
+    if os.path.exists(key_file):
+        return Credentials.from_service_account_file(key_file, scopes=SCOPES)
+    elif raw:
+        return Credentials.from_service_account_info(json.loads(raw), scopes=SCOPES)
+    raise ValueError("No Google credentials found")
 
 
 def _service():
