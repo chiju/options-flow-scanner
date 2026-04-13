@@ -123,10 +123,80 @@ def _signal(pc) -> str:
     return "🔴 Bearish"
 
 
-def store_results(results: list):
+def get_last_scan(svc, sid) -> dict:
+    """Read last scan from SYMBOL_TRACKER and UNUSUAL_ALERTS.
+    Returns {symbol: {pc_ratio, contracts: set of 'TYPE-STRIKE-EXPIRY'}}
+    """
+    last = {}
+
+    # Get SYMBOL_TRACKER for P/C ratios
+    r = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="SYMBOL_TRACKER!A:D"
+    ).execute()
+    for row in r.get("values", [])[1:]:  # skip header
+        if len(row) >= 4:
+            try:
+                last[row[1]] = {"pc": float(row[3]) if row[3] else None, "contracts": set()}
+            except ValueError:
+                pass
+
+    # Get last 100 rows of UNUSUAL_ALERTS for contract tracking
+    r = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="UNUSUAL_ALERTS!A:F"
+    ).execute()
+    rows = r.get("values", [])[1:]  # skip header
+    if rows:
+        last_ts = rows[-1][0] if rows else None
+        for row in reversed(rows):
+            if len(row) < 6: continue
+            if row[0] != last_ts: break  # only last timestamp
+            sym = row[1]
+            key = f"{row[2]}-{row[3]}-{row[4]}"  # TYPE-STRIKE-EXPIRY
+            if sym in last:
+                last[sym]["contracts"].add(key)
+
+    return last
+
+
+def compare_scans(current_results: list, previous: dict) -> list:
+    """Compare current scan to previous. Returns list of momentum alert strings."""
+    alerts = []
+
+    for r in current_results:
+        sym = r["symbol"]
+        pc_now = r["pc_ratio"]
+        prev = previous.get(sym, {})
+        pc_prev = prev.get("pc")
+        prev_contracts = prev.get("contracts", set())
+
+        # P/C ratio momentum
+        if pc_now and pc_prev:
+            if pc_now >= 1.5 and pc_now > pc_prev * 1.3:
+                alerts.append(f"⚠️ `{sym}` hedging ↑ P/C {pc_prev} → *{pc_now}*")
+            elif pc_now <= 0.6 and pc_now < pc_prev * 0.7:
+                alerts.append(f"🚀 `{sym}` bullish ↑ P/C {pc_prev} → *{pc_now}*")
+
+        # Repeated contracts = position being built
+        for entry in r["calls"] + r["puts"]:
+            if entry["premium"] < 5_000_000: continue
+            key = f"{entry['type']}-{entry['strike']}-{entry['expiry']}"
+            if key in prev_contracts:
+                side = "🐂" if entry["type"] == "CALL" else "🐻"
+                alerts.append(
+                    f"🔁 {side} `{sym}` {entry['type']} ${entry['strike']:.0f} {entry['expiry']} "
+                    f"— repeated 💰 ${entry['premium']//1000}K"
+                )
+
+    return alerts
+
+
+def store_results(results: list) -> list:
     try:
         svc = _service()
         sid = SHEET_ID
+
+        # Get previous scan BEFORE writing new data
+        previous = get_last_scan(svc, sid)
 
         # Ensure all needed tabs exist
         all_tabs = ["SYMBOL_TRACKER", "UNUSUAL_ALERTS"] + [r["symbol"] for r in results]
@@ -176,5 +246,8 @@ def store_results(results: list):
         total_sym_rows = sum(len(v) for v in symbol_rows.values())
         print(f"  📊 Sheets: {len(alert_rows)} alerts | {total_sym_rows} symbol rows | {len(tracker_rows)} tracker")
 
+        return compare_scans(results, previous)
+
     except Exception as e:
         print(f"  ⚠️  Sheets error: {e}")
+        return []

@@ -258,11 +258,14 @@ def run_scan():
         return
 
     report = format_report(results)
+
+    # Store to Google Sheets and get momentum signals
+    momentum = store_results(results)
+
+    if momentum:
+        report += "\n\n*🔁 Momentum Signals*\n" + "\n".join(momentum)
+
     send_telegram(report)
-
-    # Store to Google Sheets
-    store_results(results)
-
     print("✅ Report sent.")
 
 
