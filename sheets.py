@@ -80,7 +80,7 @@ def _append(svc, sid, tab, rows):
     if not rows:
         return
     svc.spreadsheets().values().append(
-        spreadsheetId=sid, range=f"{tab}!A1",
+        spreadsheetId=sid, range=f"{tab}!A2",
         valueInputOption="RAW", insertDataOption="INSERT_ROWS",
         body={"values": rows}
     ).execute()
