@@ -1,32 +1,37 @@
 """
-Google Sheets storage for options flow scanner.
-Auto-creates the spreadsheet and tabs on first run.
+Google Sheets storage for Options Flow Tracker.
+Spreadsheet: https://docs.google.com/spreadsheets/d/1zhF6uyyoJpfbcjQvTqIQ11hbLQ17fO_4mKv1W5H4q8g
 
-Sheets:
-  RAW_FLOW       — every contract scanned (append)
-  UNUSUAL_ALERTS — only high-conviction signals (append)
-  SYMBOL_TRACKER — one row per symbol, updated in place (upsert)
+Tabs:
+  SYMBOL_TRACKER  — one row per symbol, updated in place
+  UNUSUAL_ALERTS  — all high-conviction signals, appended
+  SPY / QQQ / IWM / MSFT / NVDA / ...  — per-symbol, all contracts, appended
 """
 import os, json
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES    = ["https://www.googleapis.com/auth/spreadsheets"]
+SHEET_ID  = os.environ.get("GOOGLE_SHEET_ID", "1zhF6uyyoJpfbcjQvTqIQ11hbLQ17fO_4mKv1W5H4q8g")
 
-# Sheet tab definitions: (name, headers)
-TABS = {
-    "UNUSUAL_ALERTS": [
-        "timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
-        "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
-    ],
-    "SYMBOL_TRACKER": [
-        "last_updated", "symbol", "signal", "pc_ratio",
-        "call_vol", "put_vol", "top_call_k", "top_put_k",
-    ],
-}
+ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
-UNUSUAL_THRESHOLD_K = 5000  # $5M+ goes to UNUSUAL_ALERTS
+SUMMARY_HEADERS = ["last_updated", "symbol", "signal", "pc_ratio",
+                   "call_vol", "put_vol", "top_call_k", "top_put_k"]
+
+ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
+                   "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal"]
+
+SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
+                   "volume", "premium_k", "iv", "delta", "sweep", "iv_spike"]
+
+
+def dte_bucket(dte: int) -> str:
+    if dte <= 7:   return "0-7d 🔥"
+    if dte <= 30:  return "8-30d 🟢"
+    if dte <= 90:  return "31-90d 🟡"
+    return "90d+ 🟠"
 
 
 def _creds():
@@ -43,144 +48,133 @@ def _service():
     return build("sheets", "v4", credentials=_creds(), cache_discovery=False)
 
 
-def _sheet_id():
-    sid = os.environ.get("GOOGLE_SHEET_ID", "")
-    if not sid:
-        raise ValueError("GOOGLE_SHEET_ID env var not set")
-    return sid
-
-
-def dte_bucket(dte: int) -> str:
-    if dte <= 7:   return "0-7d 🔥"
-    if dte <= 30:  return "8-30d 🟢"
-    if dte <= 90:  return "31-90d 🟡"
-    return "90d+ 🟠"
-
-
-def ensure_tabs(svc, sheet_id: str):
-    """Create any missing tabs with header rows."""
-    meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
+def _ensure_tabs(svc, sid: str, needed: list):
+    """Create missing tabs and write headers."""
+    meta     = svc.spreadsheets().get(spreadsheetId=sid).execute()
     existing = {s["properties"]["title"] for s in meta["sheets"]}
 
-    requests = []
-    for tab in TABS:
-        if tab not in existing:
-            requests.append({"addSheet": {"properties": {"title": tab}}})
-
-    if requests:
+    # Add missing tabs
+    reqs = [{"addSheet": {"properties": {"title": t}}}
+            for t in needed if t not in existing]
+    if reqs:
         svc.spreadsheets().batchUpdate(
-            spreadsheetId=sheet_id,
-            body={"requests": requests}
+            spreadsheetId=sid, body={"requests": reqs}
         ).execute()
 
-    # Write headers to any newly created tabs
-    meta2 = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
-    for sheet in meta2["sheets"]:
-        title = sheet["properties"]["title"]
-        if title not in TABS:
+    # Write headers to new tabs
+    header_map = {
+        "SYMBOL_TRACKER": SUMMARY_HEADERS,
+        "UNUSUAL_ALERTS": ALERT_HEADERS,
+    }
+    for tab in needed:
+        if tab in existing:
             continue
-        # Check if header row exists
-        result = svc.spreadsheets().values().get(
-            spreadsheetId=sheet_id, range=f"{title}!A1:Z1"
+        headers = header_map.get(tab, SYMBOL_HEADERS)
+        svc.spreadsheets().values().update(
+            spreadsheetId=sid, range=f"{tab}!A1",
+            valueInputOption="RAW", body={"values": [headers]}
         ).execute()
-        if not result.get("values"):
-            svc.spreadsheets().values().update(
-                spreadsheetId=sheet_id,
-                range=f"{title}!A1",
-                valueInputOption="RAW",
-                body={"values": [TABS[title]]},
-            ).execute()
 
 
-def append_rows(svc, sheet_id: str, tab: str, rows: list):
+def _append(svc, sid, tab, rows):
     if not rows:
         return
     svc.spreadsheets().values().append(
-        spreadsheetId=sheet_id,
-        range=f"{tab}!A1",
-        valueInputOption="RAW",
-        insertDataOption="INSERT_ROWS",
-        body={"values": rows},
+        spreadsheetId=sid, range=f"{tab}!A1",
+        valueInputOption="RAW", insertDataOption="INSERT_ROWS",
+        body={"values": rows}
     ).execute()
 
 
-def upsert_symbol_tracker(svc, sheet_id: str, rows: list):
-    """Update existing symbol row or append new one."""
-    if not rows:
-        return
+def _upsert_tracker(svc, sid, rows):
+    """Update existing symbol row or append."""
+    existing = {}
     result = svc.spreadsheets().values().get(
-        spreadsheetId=sheet_id, range="SYMBOL_TRACKER!A:B"
+        spreadsheetId=sid, range="SYMBOL_TRACKER!A:B"
     ).execute()
-    existing = {r[1]: i + 1 for i, r in enumerate(result.get("values", [])) if len(r) > 1}
+    for i, r in enumerate(result.get("values", [])):
+        if len(r) > 1:
+            existing[r[1]] = i + 1  # 1-indexed
 
     updates, appends = [], []
     for row in rows:
-        sym = row[1]  # symbol is col B (index 1)
+        sym = row[1]
         if sym in existing:
-            row_num = existing[sym] + 1  # +1 for 1-indexed, +1 to skip header
-            updates.append({
-                "range": f"SYMBOL_TRACKER!A{row_num}",
-                "values": [row],
-            })
+            row_num = existing[sym] + 1
+            updates.append({"range": f"SYMBOL_TRACKER!A{row_num}", "values": [row]})
         else:
             appends.append(row)
 
     if updates:
         svc.spreadsheets().values().batchUpdate(
-            spreadsheetId=sheet_id,
-            body={"valueInputOption": "RAW", "data": updates},
+            spreadsheetId=sid,
+            body={"valueInputOption": "RAW", "data": updates}
         ).execute()
     if appends:
-        append_rows(svc, sheet_id, "SYMBOL_TRACKER", appends)
-
-
-def store_results(results: list):
-    """Main entry point — store scan results to sheets."""
-    try:
-        svc = _service()
-        sid = _sheet_id()
-        ensure_tabs(svc, sid)
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        alert_rows, tracker_rows = [], []
-
-        for r in results:
-            sym = r["symbol"]
-            pc  = r["pc_ratio"] or ""
-            sig = _signal(pc)
-
-            top_call_k = r["calls"][0]["premium"] // 1000 if r["calls"] else 0
-            top_put_k  = r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0
-            tracker_rows.append([
-                now, sym, sig, pc or "",
-                r["call_vol"], r["put_vol"], top_call_k, top_put_k,
-            ])
-
-            for entry in r["calls"] + r["puts"]:
-                bucket = dte_bucket(entry["dte"])
-                if entry["premium"] >= UNUSUAL_THRESHOLD_K * 1000 or entry.get("sweep"):
-                    alert_rows.append([
-                        now, sym, entry["type"],
-                        entry["strike"], entry["expiry"], bucket,
-                        entry["volume"], entry["premium"] // 1000,
-                        entry["iv"] or "", entry["delta"] or "",
-                        "YES" if entry.get("sweep") else "",
-                        "YES" if entry.get("iv_spike") else "",
-                        sig,
-                    ])
-
-        append_rows(svc, sid, "UNUSUAL_ALERTS", alert_rows)
-        upsert_symbol_tracker(svc, sid, tracker_rows)
-        print(f"  📊 Sheets: {len(alert_rows)} alerts, {len(tracker_rows)} symbols updated")
-
-    except Exception as e:
-        print(f"  ⚠️  Sheets error: {e}")
+        _append(svc, sid, "SYMBOL_TRACKER", appends)
 
 
 def _signal(pc) -> str:
-    if pc is None: return "⚪ No data"
+    if pc is None: return "⚪"
     if pc < 0.3:   return "🔥 Very Bullish"
     if pc < 0.6:   return "🟢 Bullish"
     if pc < 1.0:   return "🟡 Neutral"
     if pc < 1.5:   return "🟠 Cautious"
     return "🔴 Bearish"
+
+
+def store_results(results: list):
+    try:
+        svc = _service()
+        sid = SHEET_ID
+
+        # Ensure all needed tabs exist
+        all_tabs = ["SYMBOL_TRACKER", "UNUSUAL_ALERTS"] + [r["symbol"] for r in results]
+        _ensure_tabs(svc, sid, all_tabs)
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        tracker_rows, alert_rows = [], []
+        symbol_rows = {}   # tab_name → [rows]
+
+        for r in results:
+            sym = r["symbol"]
+            pc  = r["pc_ratio"]
+            sig = _signal(pc)
+
+            # SYMBOL_TRACKER
+            tracker_rows.append([
+                now, sym, sig, pc or "",
+                r["call_vol"], r["put_vol"],
+                r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
+                r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,
+            ])
+
+            # Per-symbol + UNUSUAL_ALERTS
+            sym_rows = []
+            for entry in r["calls"] + r["puts"]:
+                bucket = dte_bucket(entry["dte"])
+                base = [
+                    now, entry["type"], entry["strike"], entry["expiry"], bucket,
+                    entry["volume"], entry["premium"] // 1000,
+                    entry["iv"] or "", entry["delta"] or "",
+                    "YES" if entry.get("sweep") else "",
+                    "YES" if entry.get("iv_spike") else "",
+                ]
+                sym_rows.append(base)
+
+                if entry["premium"] >= ALERT_THRESHOLD_K * 1000 or entry.get("sweep"):
+                    alert_rows.append([now, sym] + base[1:] + [sig])
+
+            symbol_rows[sym] = sym_rows
+
+        # Write everything
+        _upsert_tracker(svc, sid, tracker_rows)
+        _append(svc, sid, "UNUSUAL_ALERTS", alert_rows)
+        for sym, rows in symbol_rows.items():
+            _append(svc, sid, sym, rows)
+
+        total_sym_rows = sum(len(v) for v in symbol_rows.values())
+        print(f"  📊 Sheets: {len(alert_rows)} alerts | {total_sym_rows} symbol rows | {len(tracker_rows)} tracker")
+
+    except Exception as e:
+        print(f"  ⚠️  Sheets error: {e}")
