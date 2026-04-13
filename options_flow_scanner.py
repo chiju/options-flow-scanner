@@ -261,9 +261,7 @@ def run_scan():
     send_telegram(report)
 
     # Store to Google Sheets
-    spy = next((r for r in results if r["symbol"] == "SPY"), None)
-    mood = interpret_signal(spy) if spy else "⚪"
-    store_results(results, mood)
+    store_results(results)
 
     print("✅ Report sent.")
 

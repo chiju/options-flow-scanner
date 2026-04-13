@@ -16,11 +16,6 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Sheet tab definitions: (name, headers)
 TABS = {
-    "RAW_FLOW": [
-        "timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
-        "volume", "premium_k", "iv", "delta", "sweep", "iv_spike",
-        "pc_ratio", "market_mood",
-    ],
     "UNUSUAL_ALERTS": [
         "timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
         "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
@@ -139,22 +134,21 @@ def upsert_symbol_tracker(svc, sheet_id: str, rows: list):
         append_rows(svc, sheet_id, "SYMBOL_TRACKER", appends)
 
 
-def store_results(results: list, market_mood: str):
-    """Main entry point — store scan results to all sheets."""
+def store_results(results: list):
+    """Main entry point — store scan results to sheets."""
     try:
         svc = _service()
         sid = _sheet_id()
         ensure_tabs(svc, sid)
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        raw_rows, alert_rows, tracker_rows = [], [], []
+        alert_rows, tracker_rows = [], []
 
         for r in results:
             sym = r["symbol"]
             pc  = r["pc_ratio"] or ""
             sig = _signal(pc)
 
-            # SYMBOL_TRACKER row (upsert)
             top_call_k = r["calls"][0]["premium"] // 1000 if r["calls"] else 0
             top_put_k  = r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0
             tracker_rows.append([
@@ -162,29 +156,22 @@ def store_results(results: list, market_mood: str):
                 r["call_vol"], r["put_vol"], top_call_k, top_put_k,
             ])
 
-            # RAW_FLOW + UNUSUAL_ALERTS rows
             for entry in r["calls"] + r["puts"]:
                 bucket = dte_bucket(entry["dte"])
-                row = [
-                    now, sym, entry["type"],
-                    entry["strike"], entry["expiry"], bucket,
-                    entry["volume"], entry["premium"] // 1000,
-                    entry["iv"] or "", entry["delta"] or "",
-                    "YES" if entry.get("sweep") else "",
-                    "YES" if entry.get("iv_spike") else "",
-                    pc or "", market_mood,
-                ]
-                raw_rows.append(row)
-
-                # Alert if large premium or sweep
                 if entry["premium"] >= UNUSUAL_THRESHOLD_K * 1000 or entry.get("sweep"):
-                    alert_rows.append(row[:13] + [sig])
+                    alert_rows.append([
+                        now, sym, entry["type"],
+                        entry["strike"], entry["expiry"], bucket,
+                        entry["volume"], entry["premium"] // 1000,
+                        entry["iv"] or "", entry["delta"] or "",
+                        "YES" if entry.get("sweep") else "",
+                        "YES" if entry.get("iv_spike") else "",
+                        sig,
+                    ])
 
-        append_rows(svc, sid, "RAW_FLOW", raw_rows)
         append_rows(svc, sid, "UNUSUAL_ALERTS", alert_rows)
         upsert_symbol_tracker(svc, sid, tracker_rows)
-
-        print(f"  📊 Sheets: {len(raw_rows)} rows → RAW_FLOW, {len(alert_rows)} → UNUSUAL_ALERTS")
+        print(f"  📊 Sheets: {len(alert_rows)} alerts, {len(tracker_rows)} symbols updated")
 
     except Exception as e:
         print(f"  ⚠️  Sheets error: {e}")
