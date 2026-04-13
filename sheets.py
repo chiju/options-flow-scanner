@@ -26,6 +26,8 @@ ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucke
 SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike"]
 
+OI_HEADERS      = ["date", "symbol", "call_oi", "put_oi", "pc_oi_ratio"]
+
 
 def dte_bucket(dte: int) -> str:
     if dte <= 7:   return "0-7d 🔥"
@@ -121,6 +123,65 @@ def _signal(pc) -> str:
     if pc < 1.0:   return "🟡 Neutral"
     if pc < 1.5:   return "🟠 Cautious"
     return "🔴 Bearish"
+
+
+def store_oi_snapshot(svc, sid: str, results: list):
+    """Store daily OI snapshot — one row per symbol per day (upsert by date+symbol)."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    _ensure_tabs(svc, sid, ["OI_SNAPSHOT"])
+    r = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="OI_SNAPSHOT!A:B"
+    ).execute()
+    existing = {(row[0], row[1]): i + 1 for i, row in enumerate(r.get("values", [])) if len(row) >= 2}
+    updates, appends = [], []
+    for res in results:
+        sym = res["symbol"]
+        call_oi = sum(e.get("oi", 0) or 0 for e in res["calls"])
+        put_oi  = sum(e.get("oi", 0) or 0 for e in res["puts"])
+        pc_oi   = round(put_oi / call_oi, 2) if call_oi > 0 else ""
+        row = [today, sym, call_oi, put_oi, pc_oi]
+        key = (today, sym)
+        if key in existing:
+            updates.append({"range": f"OI_SNAPSHOT!A{existing[key]+1}", "values": [row]})
+        else:
+            appends.append(row)
+    if updates:
+        svc.spreadsheets().values().batchUpdate(
+            spreadsheetId=sid, body={"valueInputOption": "RAW", "data": updates}
+        ).execute()
+    if appends:
+        _append(svc, sid, "OI_SNAPSHOT", appends)
+
+
+def get_oi_changes(svc, sid: str, results: list) -> list:
+    """Compare today's OI P/C to yesterday's. Returns change alert strings."""
+    r = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="OI_SNAPSHOT!A:E"
+    ).execute()
+    rows = r.get("values", [])[1:]
+    history = {}
+    for row in rows:
+        if len(row) < 5: continue
+        try:
+            history.setdefault(row[1], {})[row[0]] = float(row[4]) if row[4] else None
+        except ValueError:
+            pass
+    today = datetime.now().strftime("%Y-%m-%d")
+    all_dates = sorted({d for sym_d in history.values() for d in sym_d})
+    if len(all_dates) < 2:
+        return []
+    yesterday = all_dates[-2] if all_dates[-1] == today else all_dates[-1]
+    alerts = []
+    for res in results:
+        sym = res["symbol"]
+        t, y = history.get(sym, {}).get(today), history.get(sym, {}).get(yesterday)
+        if t and y:
+            diff = round(t - y, 2)
+            if diff > 0.5:
+                alerts.append(f"📈 `{sym}` OI P/C ↑ {y} → *{t}* — put OI growing")
+            elif diff < -0.5:
+                alerts.append(f"📉 `{sym}` OI P/C ↓ {y} → *{t}* — call OI growing")
+    return alerts
 
 
 def get_last_scan(svc, sid) -> dict:
@@ -246,7 +307,12 @@ def store_results(results: list) -> list:
         total_sym_rows = sum(len(v) for v in symbol_rows.values())
         print(f"  📊 Sheets: {len(alert_rows)} alerts | {total_sym_rows} symbol rows | {len(tracker_rows)} tracker")
 
-        return compare_scans(results, previous)
+        # OI snapshot (once per day is enough but harmless to run each scan)
+        store_oi_snapshot(svc, sid, results)
+        oi_alerts = get_oi_changes(svc, sid, results)
+
+        momentum = compare_scans(results, previous)
+        return momentum + oi_alerts
 
     except Exception as e:
         print(f"  ⚠️  Sheets error: {e}")

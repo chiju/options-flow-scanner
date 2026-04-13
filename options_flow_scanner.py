@@ -12,6 +12,7 @@ from alpaca.data.historical import OptionHistoricalDataClient
 from alpaca.data.requests import OptionChainRequest
 import requests
 from sheets import store_results
+from earnings import get_earnings_this_week
 
 # ── Watchlist ────────────────────────────────────────────────────────────────
 INDEX_ETFS = ["SPY", "QQQ", "IWM"]          # S&P 500, Nasdaq, Russell 2000
@@ -185,7 +186,7 @@ def send_telegram(text: str):
 
 
 # ── Formatter ─────────────────────────────────────────────────────────────────
-def format_report(results: list) -> str:
+def format_report(results: list, earnings: dict = None) -> str:
     now = datetime.now().strftime("%b %d %H:%M")
     lines = [f"*📊 Options Flow — {now}*", ""]
 
@@ -252,6 +253,13 @@ def format_report(results: list) -> str:
 
     lines.append("")
     lines.append("_P/C < 0.6 = bullish · > 1.5 = bearish · Not financial advice_")
+
+    # Earnings warning
+    if earnings:
+        lines.append("\n*📅 Earnings This Week*")
+        for sym, date in earnings.items():
+            lines.append(f"  `{sym}` reports {date} — options activity may be elevated")
+
     return "\n".join(lines)
 
 
@@ -271,7 +279,7 @@ def run_scan():
         print("No results.")
         return
 
-    report = format_report(results)
+    report = format_report(results, get_earnings_this_week(ALL_SYMBOLS))
 
     # Store to Google Sheets and get momentum signals
     momentum = store_results(results)
