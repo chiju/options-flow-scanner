@@ -13,7 +13,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 SCOPES    = ["https://www.googleapis.com/auth/spreadsheets"]
-SHEET_ID  = os.environ.get("GOOGLE_SHEET_ID", "1zhF6uyyoJpfbcjQvTqIQ11hbLQ17fO_4mKv1W5H4q8g")
+SHEET_ID  = os.environ.get("GOOGLE_OPTIONS_SHEET_ID", "1zhF6uyyoJpfbcjQvTqIQ11hbLQ17fO_4mKv1W5H4q8g")
 
 ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
