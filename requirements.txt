@@ -1,0 +1,6 @@
+requests
+alpaca-py
+pytz
+python-dotenv
+google-api-python-client
+google-auth
