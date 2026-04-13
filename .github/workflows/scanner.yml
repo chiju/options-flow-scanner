@@ -2,7 +2,7 @@ name: Options Flow Scanner
 
 on:
   schedule:
-    - cron: "*/15 14-20 * * 1-5"   # Every 15 min, 10am–4pm ET (UTC-4)
+    - cron: "*/5 14-20 * * 1-5"    # Every 5 min, 10am–4pm ET (UTC-4)
   workflow_dispatch:
 
 env:
