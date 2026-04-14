@@ -8,7 +8,7 @@ Tabs:
   SPY / QQQ / IWM / MSFT / NVDA / ...  — per-symbol, all contracts, appended
 """
 import os, json
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
