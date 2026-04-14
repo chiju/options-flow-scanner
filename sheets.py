@@ -97,21 +97,20 @@ def _append(svc, sid, tab, rows):
 
 
 def _upsert_tracker(svc, sid, rows):
-    """Update existing symbol row or append."""
-    existing = {}
+    """Update existing symbol row or append. One row per symbol."""
     result = svc.spreadsheets().values().get(
         spreadsheetId=sid, range="SYMBOL_TRACKER!A:B"
     ).execute()
+    existing = {}
     for i, r in enumerate(result.get("values", [])):
-        if len(r) > 1:
-            existing[r[1]] = i + 1  # 1-indexed
+        if len(r) > 1 and i > 0:  # skip header row (i=0)
+            existing[r[1]] = i + 1  # 1-indexed sheet row number
 
     updates, appends = [], []
     for row in rows:
         sym = row[1]
         if sym in existing:
-            row_num = existing[sym] + 1
-            updates.append({"range": f"SYMBOL_TRACKER!A{row_num}", "values": [row]})
+            updates.append({"range": f"SYMBOL_TRACKER!A{existing[sym]}", "values": [row]})
         else:
             appends.append(row)
 
