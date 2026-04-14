@@ -2,11 +2,11 @@ name: Options Flow Scanner
 
 on:
   schedule:
-    - cron: "*/15 14-20 * * 1-5"   # Fallback (cron-job.org is primary trigger)
     - cron: "0 12 * * 1-5"          # Morning brief 8am ET
     - cron: "30 20 * * 1-5"         # Evening digest + OI tracker 4:30pm ET
     - cron: "0 13 * * 1-5"          # Pre-market scan 9am ET
     - cron: "0 20 * * 5"            # Weekly summary every Friday 4pm ET
+    # 15-min scan handled by cron-job.org → workflow_dispatch
   workflow_dispatch:
 
 env:
@@ -20,7 +20,6 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     if: >
-      github.event.schedule == '*/15 14-20 * * 1-5' ||
       github.event.schedule == '0 13 * * 1-5' ||
       github.event.schedule == '30 20 * * 1-5' ||
       github.event_name == 'workflow_dispatch'
