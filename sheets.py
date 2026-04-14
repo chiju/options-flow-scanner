@@ -278,25 +278,34 @@ def detect_signal_events(svc, sid: str, results: list) -> list:
 
 
 def store_oi_snapshot(svc, sid: str, results: list):
-    """Store daily OI snapshot — one row per symbol per day (upsert by date+symbol)."""
+    """Store daily volume snapshot per symbol (OI not available in free chain data).
+    Tracks call_vol vs put_vol daily to detect trend changes."""
     today = datetime.now().strftime("%Y-%m-%d")
     _ensure_tabs(svc, sid, ["OI_SNAPSHOT"])
-    r = svc.spreadsheets().values().get(
-        spreadsheetId=sid, range="OI_SNAPSHOT!A:B"
-    ).execute()
+
+    # Fix header if wrong
+    r = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="OI_SNAPSHOT!A1:E1").execute()
+    header = r.get("values", [[]])[0] if r.get("values") else []
+    if header != ["date", "symbol", "call_vol", "put_vol", "pc_vol_ratio"]:
+        svc.spreadsheets().values().update(spreadsheetId=SHEET_ID, range="OI_SNAPSHOT!A1",
+            valueInputOption="RAW", body={"values": [["date", "symbol", "call_vol", "put_vol", "pc_vol_ratio"]]}).execute()
+
+    r = svc.spreadsheets().values().get(spreadsheetId=sid, range="OI_SNAPSHOT!A:B").execute()
     existing = {(row[0], row[1]): i + 1 for i, row in enumerate(r.get("values", [])) if len(row) >= 2}
+
     updates, appends = [], []
     for res in results:
         sym = res["symbol"]
-        call_oi = sum(e.get("oi", 0) or 0 for e in res["calls"])
-        put_oi  = sum(e.get("oi", 0) or 0 for e in res["puts"])
-        pc_oi   = round(put_oi / call_oi, 2) if call_oi > 0 else ""
-        row = [today, sym, call_oi, put_oi, pc_oi]
+        call_vol = res["call_vol"]
+        put_vol  = res["put_vol"]
+        pc_ratio = round(put_vol / call_vol, 2) if call_vol > 0 else ""
+        row = [today, sym, call_vol, put_vol, pc_ratio]
         key = (today, sym)
         if key in existing:
             updates.append({"range": f"OI_SNAPSHOT!A{existing[key]+1}", "values": [row]})
         else:
             appends.append(row)
+
     if updates:
         svc.spreadsheets().values().batchUpdate(
             spreadsheetId=sid, body={"valueInputOption": "RAW", "data": updates}
@@ -306,14 +315,14 @@ def store_oi_snapshot(svc, sid: str, results: list):
 
 
 def get_oi_changes(svc, sid: str, results: list) -> list:
-    """Compare today's OI P/C to yesterday's. Returns change alert strings."""
+    """Compare today's volume P/C vs yesterday's. Returns change alert strings."""
     r = svc.spreadsheets().values().get(
         spreadsheetId=sid, range="OI_SNAPSHOT!A:E"
     ).execute()
     rows = r.get("values", [])[1:]
     history = {}
     for row in rows:
-        if len(row) < 5: continue
+        if len(row) < 5 or row[0] == "date": continue
         try:
             history.setdefault(row[1], {})[row[0]] = float(row[4]) if row[4] else None
         except ValueError:
@@ -330,9 +339,9 @@ def get_oi_changes(svc, sid: str, results: list) -> list:
         if t and y:
             diff = round(t - y, 2)
             if diff > 0.5:
-                alerts.append(f"📈 `{sym}` OI P/C ↑ {y} → *{t}* — put OI growing")
+                alerts.append(f"📈 `{sym}` vol P/C ↑ {y} → *{t}* — put volume growing")
             elif diff < -0.5:
-                alerts.append(f"📉 `{sym}` OI P/C ↓ {y} → *{t}* — call OI growing")
+                alerts.append(f"📉 `{sym}` vol P/C ↓ {y} → *{t}* — call volume growing")
     return alerts
 
 
