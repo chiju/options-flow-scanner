@@ -217,9 +217,12 @@ def run_brief(mode: str = "morning"):
     instruction = MORNING_INSTRUCTION if mode == "morning" else EVENING_INSTRUCTION
     analyst_prompt = ANALYST_PROMPT.format(mode_instruction=instruction, data=data_str)
 
-    # Run both analysts in parallel-ish
+    # Run both analysts
     print("  Calling Gemini...")
     analysis_a = call_gemini(analyst_prompt)
+    if "error" in analysis_a.lower() or len(analysis_a) < 50:
+        print("  ⚠️ Gemini failed, using Groq as backup")
+        analysis_a = call_groq(analyst_prompt)
 
     print("  Calling Groq...")
     analysis_b = call_groq(analyst_prompt)
@@ -227,11 +230,15 @@ def run_brief(mode: str = "morning"):
     # Verifier consolidates
     print("  Calling verifier (HuggingFace — 3rd provider)...")
     verifier_prompt = VERIFIER_PROMPT.format(
-        analysis_a=analysis_a,
-        analysis_b=analysis_b,
-        data=data_str[:2000]
+        analysis_a=analysis_a, analysis_b=analysis_b, data=data_str[:2000]
     )
     consolidated = call_hf(verifier_prompt)
+
+    # Strip thinking preamble — find first section marker
+    for marker in ["✅", "⚠️", "💡", "📊"]:
+        if marker in consolidated:
+            consolidated = consolidated[consolidated.index(marker):]
+            break
 
     # Format Telegram message
     emoji = "🌅" if mode == "morning" else "🌆"
@@ -243,6 +250,19 @@ def run_brief(mode: str = "morning"):
     clean = consolidated.replace("**", "").replace("*", "•").replace("_", "")
     msg += clean
     msg += "\n\nBased on options flow data only. Verify with technicals before trading. Not financial advice."
+
+    # Log brief to Google Sheets for historical analysis
+    try:
+        from sheets import _service, SHEET_ID, _ensure_tabs, _append
+        svc = _service()
+        _ensure_tabs(svc, SHEET_ID, ["BRIEF_LOG"])
+        _append(svc, SHEET_ID, "BRIEF_LOG", [[
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            mode.upper(),
+            consolidated[:500]  # truncate for sheet
+        ]])
+    except Exception as e:
+        print(f"  ⚠️ Brief log error: {e}")
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat  = os.environ.get("TELEGRAM_CHAT_ID", "")
