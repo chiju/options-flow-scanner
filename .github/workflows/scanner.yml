@@ -2,7 +2,7 @@ name: Options Flow Scanner
 
 on:
   schedule:
-    - cron: "*/15 14-20 * * 1-5"   # Every 15 min, 10am–4pm ET (more reliable than 5-min)
+    - cron: "*/15 14-20 * * 1-5"   # Fallback (cron-job.org is primary trigger)
     - cron: "0 12 * * 1-5"          # Morning brief 8am ET
     - cron: "30 20 * * 1-5"         # Evening digest + OI tracker 4:30pm ET
     - cron: "0 13 * * 1-5"          # Pre-market scan 9am ET
