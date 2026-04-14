@@ -136,31 +136,33 @@ def call_hf(prompt: str) -> str:
         return call_gemini(prompt)
 
 
-VERIFIER_PROMPT = """You are a senior options flow analyst verifying two junior analysts' reports.
-STRICT RULES:
-1. Do NOT introduce any claim not present in at least one analyst's report
-2. Every claim in CONSENSUS must be supported by BOTH analysts
-3. Flag any claim that contradicts the raw data as INCORRECT
-4. Preserve unique insights from each analyst
+VERIFIER_PROMPT = """You are a senior options flow analyst. Two junior analysts have reviewed the same data.
+Your job: produce ONE clean consolidated report. Do not show your reasoning process.
 
-ANALYST 1 (Gemini):
-{analysis_a}
+RULES (follow strictly):
+- Only include claims supported by the RAW DATA below
+- Mark any claim not in raw data as [UNVERIFIED]
+- Output ONLY the 4 sections below, nothing else
 
-ANALYST 2 (Groq/Llama):
-{analysis_b}
+ANALYST 1: {analysis_a}
 
-RAW DATA (ground truth):
-{data}
+ANALYST 2: {analysis_b}
 
-Write your consolidated report in exactly this format:
+RAW DATA: {data}
 
-✅ CONSENSUS: [claims both analysts agree on, verified against raw data]
+Output exactly this format (no preamble, no explanation):
 
-⚠️ UNCERTAIN: [claims they disagree on, or that contradict raw data — mark incorrect ones]
+✅ CONSENSUS:
+[bullet points both analysts agree on, verified in raw data]
 
-💡 UNIQUE FINDINGS: [valuable insights from only one analyst, if data-supported]
+⚠️ UNCERTAIN:
+[claims they disagree on, or marked [UNVERIFIED]]
 
-📊 FINAL BRIEF: [consolidated analysis under 120 words, only data-supported claims]"""
+💡 UNIQUE FINDINGS:
+[data-supported insight from only one analyst]
+
+📊 FINAL BRIEF (120 words max):
+[clean actionable summary — what happened, what to watch, market bias]"""
 
 
 def call_gemini(prompt: str) -> str:
