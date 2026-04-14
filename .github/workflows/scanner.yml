@@ -1,12 +1,8 @@
 name: Options Flow Scanner
 
 on:
-  schedule:
-    - cron: "0 12 * * 1-5"          # Morning brief 8am ET
-    - cron: "30 20 * * 1-5"         # Evening digest + OI tracker 4:30pm ET
-    - cron: "0 13 * * 1-5"          # Pre-market scan 9am ET
-    - cron: "0 20 * * 5"            # Weekly summary every Friday 4pm ET
-    # 15-min scan handled by cron-job.org → workflow_dispatch
+  # All schedules handled by cron-job.org via workflow_dispatch (more reliable)
+  # cron-job.org jobs: 15-min scan, morning brief, pre-market, EOD, weekly summary
   workflow_dispatch:
 
 env:
