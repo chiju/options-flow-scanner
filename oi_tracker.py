@@ -47,14 +47,16 @@ def fetch_oi(symbol: str) -> list:
         if not exps:
             return []
 
-        # Pick nearest weekly + nearest monthly
+        # Pick nearest weekly (>today) + nearest monthly
         today = datetime.now().date()
         selected_exps = []
-        for exp in exps[:6]:
+        for exp in exps[:8]:
             exp_date = datetime.strptime(exp, "%Y-%m-%d").date()
             dte = (exp_date - today).days
-            if dte <= 7 and not any(e for e in selected_exps if (datetime.strptime(e, "%Y-%m-%d").date() - today).days <= 7):
-                selected_exps.append(exp)  # nearest weekly
+            if dte <= 0:
+                continue  # skip expired or today's expiry
+            if dte <= 7 and not any((datetime.strptime(e, "%Y-%m-%d").date() - today).days <= 7 for e in selected_exps):
+                selected_exps.append(exp)  # nearest weekly (future only)
             elif 8 <= dte <= 45 and len(selected_exps) < 2:
                 selected_exps.append(exp)  # nearest monthly
 
@@ -73,13 +75,18 @@ def fetch_oi(symbol: str) -> list:
                 # Top N by OI
                 top = atm.nlargest(TOP_N, "openInterest")
                 for _, row in top.iterrows():
+                    oi_val  = row.get("openInterest")
+                    vol_val = row.get("volume")
+                    strike  = row.get("strike")
+                    if any(v != v for v in [oi_val, vol_val, strike]):  # NaN check
+                        continue
                     rows.append({
                         "symbol":  symbol,
                         "expiry":  exp,
-                        "strike":  float(row["strike"]),
+                        "strike":  float(strike),
                         "type":    opt_type,
-                        "oi":      int(row.get("openInterest") or 0),
-                        "vol":     int(row.get("volume") or 0),
+                        "oi":      int(oi_val or 0),
+                        "vol":     int(vol_val or 0),
                         "price":   round(price, 2),
                     })
         return rows
