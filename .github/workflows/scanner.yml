@@ -1,9 +1,13 @@
 name: Options Flow Scanner
 
 on:
-  # All schedules handled by cron-job.org via workflow_dispatch (more reliable)
-  # cron-job.org jobs: 15-min scan, morning brief, pre-market, EOD, weekly summary
+  # All schedules handled by cron-job.org via workflow_dispatch
   workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run: scan, brief, eod, weekly'
+        required: false
+        default: 'scan'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -16,9 +20,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     if: >
-      github.event.schedule == '0 13 * * 1-5' ||
-      github.event.schedule == '30 20 * * 1-5' ||
-      github.event_name == 'workflow_dispatch'
+      github.event.inputs.job == 'scan' ||
+      github.event.inputs.job == 'premarket' ||
+      github.event.inputs.job == 'eod'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,9 +32,9 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Run scanner
         run: |
-          if [ "${{ github.event.schedule }}" = "0 13 * * 1-5" ]; then
+          if [ "${{ github.event.inputs.job }}" = "premarket" ]; then
             python options_flow_scanner.py --premarket
-          elif [ "${{ github.event.schedule }}" = "30 20 * * 1-5" ]; then
+          elif [ "${{ github.event.inputs.job }}" = "eod" ]; then
             python options_flow_scanner.py --afterhours
           else
             python options_flow_scanner.py
@@ -43,9 +47,7 @@ jobs:
 
   weekly-summary:
     runs-on: ubuntu-latest
-    if: >
-      github.event.schedule == '0 20 * * 5' ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event.inputs.job == 'weekly'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,9 +65,8 @@ jobs:
   daily-brief:
     runs-on: ubuntu-latest
     if: >
-      github.event.schedule == '0 12 * * 1-5' ||
-      github.event.schedule == '30 20 * * 1-5' ||
-      github.event_name == 'workflow_dispatch'
+      github.event.inputs.job == 'brief' ||
+      github.event.inputs.job == 'eod'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -75,7 +76,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Run daily brief
         run: |
-          if [ "${{ github.event.schedule }}" = "0 12 * * 1-5" ]; then
+          if [ "${{ github.event.inputs.job }}" = "brief" ]; then
             python daily_brief.py --morning
           else
             python daily_brief.py --evening
@@ -92,9 +93,7 @@ jobs:
 
   oi-tracker:
     runs-on: ubuntu-latest
-    if: >
-      github.event.schedule == '30 20 * * 1-5' ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event.inputs.job == 'eod'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
