@@ -102,7 +102,32 @@ EVENING_INSTRUCTION = """Write an EVENING DIGEST covering:
 3. What to watch tomorrow
 4. Overall assessment: was today bullish or bearish for smart money?"""
 
+def call_hf(prompt: str) -> str:
+    """HuggingFace Inference API — used as verifier (different provider = better cross-check)."""
+    token = os.environ.get("HF_TOKEN", "")
+    if not token:
+        return call_groq(prompt)  # fallback to Groq if no HF token
+    try:
+        r = requests.post(
+            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"inputs": prompt[:3000], "parameters": {"max_new_tokens": 600, "temperature": 0.2}},
+            timeout=30
+        )
+        result = r.json()
+        if isinstance(result, list):
+            return result[0].get("generated_text", "")[-600:]
+        return f"HF error: {str(result)[:100]}"
+    except Exception as e:
+        return call_groq(prompt)  # fallback
+
+
 VERIFIER_PROMPT = """You are a senior options flow analyst verifying two junior analysts' reports.
+STRICT RULES:
+1. Do NOT introduce any claim not present in at least one analyst's report
+2. Every claim in CONSENSUS must be supported by BOTH analysts
+3. Flag any claim that contradicts the raw data as INCORRECT
+4. Preserve unique insights from each analyst
 
 ANALYST 1 (Gemini):
 {analysis_a}
@@ -110,19 +135,18 @@ ANALYST 1 (Gemini):
 ANALYST 2 (Groq/Llama):
 {analysis_b}
 
-RAW DATA:
+RAW DATA (ground truth):
 {data}
 
-Your job:
-1. Identify where both analysts AGREE (high confidence)
-2. Identify where they DISAGREE (flag as uncertain)
-3. Correct any claims not supported by the raw data
-4. Write ONE consolidated report under 200 words
+Write your consolidated report in exactly this format:
 
-Format:
-✅ CONSENSUS: [points both agree on]
-⚠️ UNCERTAIN: [points they disagree on]
-📊 FINAL BRIEF: [your consolidated analysis]"""
+✅ CONSENSUS: [claims both analysts agree on, verified against raw data]
+
+⚠️ UNCERTAIN: [claims they disagree on, or that contradict raw data — mark incorrect ones]
+
+💡 UNIQUE FINDINGS: [valuable insights from only one analyst, if data-supported]
+
+📊 FINAL BRIEF: [consolidated analysis under 120 words, only data-supported claims]"""
 
 
 def call_gemini(prompt: str) -> str:
@@ -185,13 +209,13 @@ def run_brief(mode: str = "morning"):
     analysis_b = call_groq(analyst_prompt)
 
     # Verifier consolidates
-    print("  Calling verifier...")
+    print("  Calling verifier (HuggingFace — 3rd provider)...")
     verifier_prompt = VERIFIER_PROMPT.format(
         analysis_a=analysis_a,
         analysis_b=analysis_b,
-        data=data_str[:2000]  # truncate for verifier
+        data=data_str[:2000]
     )
-    consolidated = call_gemini(verifier_prompt)
+    consolidated = call_hf(verifier_prompt)
 
     # Format Telegram message
     emoji = "🌅" if mode == "morning" else "🌆"
