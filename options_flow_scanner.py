@@ -15,12 +15,14 @@ from alpaca.data.requests import MostActivesRequest
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 INDEX_ETFS  = ["SPY", "QQQ", "IWM"]
-SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "GLD", "TLT"]
+SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "GLD", "TLT", "ITA"]  # ITA = defence ETF
+DEFENCE     = ["LMT", "RTX", "NOC", "GD"]        # defence contractors
+CYBER       = ["CRWD", "PANW", "ZS"]              # cybersecurity (war = cyber attacks)
 PORTFOLIO   = ["MSFT","NVDA","AMZN","META","TSLA","PLTR","CRWV","IONQ","OKLO",
                "ACHR","DUOL","SOFI","PYPL","PATH","JOBY","UUUU","POET"]
 MEGA_CAPS   = ["AAPL","GOOGL","MSFT","NVDA","AMZN","META","TSLA"]
 HIGH_VOL    = ["AMD","COIN","MSTR","HOOD","SMCI","ARM","SNOW"]
-ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + SECTOR_ETFS + MEGA_CAPS + HIGH_VOL + PORTFOLIO))
+ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + SECTOR_ETFS + DEFENCE + CYBER + MEGA_CAPS + HIGH_VOL + PORTFOLIO))
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 MIN_PREMIUM       = 25000   # $25k minimum notional
@@ -257,7 +259,7 @@ def format_report(results: list, earnings: dict = None,
 
     # Sector snapshot
     sector_line = []
-    for sym in ["XLK", "XLF", "XLE", "GLD", "TLT"]:
+    for sym in ["XLK", "XLF", "XLE", "GLD", "TLT", "ITA"]:
         r = next((x for x in results if x["symbol"] == sym), None)
         if r and r["pc_ratio"]:
             sig = "🟢" if r["pc_ratio"] < 0.7 else ("🔴" if r["pc_ratio"] > 1.5 else "🟡")
