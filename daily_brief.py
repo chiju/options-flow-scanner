@@ -79,6 +79,47 @@ def format_data_for_ai(data: dict, mode: str) -> str:
 
 
 # ── AI Callers ────────────────────────────────────────────────────────────────
+def call_with_fallback(prompt: str, chain: list) -> tuple:
+    """
+    Try each model in chain order. Returns (response, model_used).
+    Chain items: 'gemini', 'groq-70b', 'groq-8b', 'openrouter'
+    """
+    callers = {
+        "gemini":     call_gemini,
+        "groq-70b":   call_groq,
+        "groq-8b":    lambda p: _call_groq_model(p, "llama-3.1-8b-instant"),
+        "openrouter": call_hf,
+    }
+    for model in chain:
+        result = callers[model](prompt)
+        if result and "error" not in result.lower()[:20] and len(result) > 50:
+            return result, model
+        print(f"  ⚠️ {model} failed, trying next...")
+    return "All models failed — check API keys", "none"
+
+
+def _call_groq_model(prompt: str, model: str) -> str:
+    key = _groq_key()
+    if not key:
+        return "Groq key not set"
+    try:
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 400, "temperature": 0.3}, timeout=30
+        )
+        return r.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Groq error: {e}"
+
+
+# Priority chains — different order per role so no single service gets all 3 calls
+ANALYST_1_CHAIN = ["gemini", "groq-70b", "openrouter"]   # Gemini first (best quality)
+ANALYST_1_CHAIN = ["gemini", "groq-70b", "openrouter"]   # Gemini first (best quality)
+ANALYST_2_CHAIN = ["groq-70b", "openrouter", "gemini"]   # Groq first (fastest)
+VERIFIER_CHAIN  = ["openrouter", "groq-8b", "gemini"]    # OpenRouter first (3rd provider)
+
 ANALYST_PROMPT = """You are an institutional options flow analyst. Analyze ONLY the data provided.
 Do NOT add information not in the data. If data is insufficient, say so explicitly.
 Cite specific $ amounts and symbols from the data.
@@ -103,7 +144,7 @@ EVENING_INSTRUCTION = """Write an EVENING DIGEST covering:
 4. Overall assessment: was today bullish or bearish for smart money?"""
 
 def call_hf(prompt: str) -> str:
-    """Verifier — uses OpenRouter free models (3rd provider: different from Google + Groq).
+    """Verifier - uses OpenRouter free models (3rd provider).
     Falls back to Groq 8B if no OpenRouter key."""
     or_key = os.environ.get("OPENROUTER_API_KEY", "")
     if or_key:
@@ -112,7 +153,7 @@ def call_hf(prompt: str) -> str:
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={"Authorization": f"Bearer {or_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "nvidia/nemotron-3-super-120b-a12b:free",  # free on OpenRouter
+                    "model": "google/gemma-4-31b-it:free",  # non-thinking model, free on OpenRouter
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 600, "temperature": 0.2
                 }, timeout=30
@@ -217,22 +258,20 @@ def run_brief(mode: str = "morning"):
     instruction = MORNING_INSTRUCTION if mode == "morning" else EVENING_INSTRUCTION
     analyst_prompt = ANALYST_PROMPT.format(mode_instruction=instruction, data=data_str)
 
-    # Run both analysts
-    print("  Calling Gemini...")
-    analysis_a = call_gemini(analyst_prompt)
-    if "error" in analysis_a.lower() or len(analysis_a) < 50:
-        print("  ⚠️ Gemini failed, using Groq as backup")
-        analysis_a = call_groq(analyst_prompt)
+    # Run both analysts using fallback chains
+    print("  Calling Analyst 1...")
+    analysis_a, model_a = call_with_fallback(analyst_prompt, ANALYST_1_CHAIN)
 
-    print("  Calling Groq...")
-    analysis_b = call_groq(analyst_prompt)
+    print("  Calling Analyst 2...")
+    analysis_b, model_b = call_with_fallback(analyst_prompt, ANALYST_2_CHAIN)
 
-    # Verifier consolidates
-    print("  Calling verifier (HuggingFace — 3rd provider)...")
+    # Verifier consolidates using 3rd-priority chain
+    print("  Calling verifier...")
     verifier_prompt = VERIFIER_PROMPT.format(
         analysis_a=analysis_a, analysis_b=analysis_b, data=data_str[:2000]
     )
-    consolidated = call_hf(verifier_prompt)
+    consolidated, model_v = call_with_fallback(verifier_prompt, VERIFIER_CHAIN)
+    print(f"  Models used: A1={model_a} A2={model_b} V={model_v}")
 
     # Strip thinking preamble — find first section marker
     for marker in ["✅", "⚠️", "💡", "📊"]:
@@ -251,15 +290,19 @@ def run_brief(mode: str = "morning"):
     msg += clean
     msg += "\n\nBased on options flow data only. Verify with technicals before trading. Not financial advice."
 
-    # Log brief to Google Sheets for historical analysis
+    # Log brief to Google Sheets AFTER stripping preamble
     try:
         from sheets import _service, SHEET_ID, _ensure_tabs, _append
         svc = _service()
         _ensure_tabs(svc, SHEET_ID, ["BRIEF_LOG"])
+        # Write header if empty
+        r = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="BRIEF_LOG!A1").execute()
+        if not r.get("values"):
+            svc.spreadsheets().values().update(spreadsheetId=SHEET_ID, range="BRIEF_LOG!A1",
+                valueInputOption="RAW", body={"values": [["timestamp", "type", "analyst1", "analyst2", "verifier", "brief"]]}).execute()
         _append(svc, SHEET_ID, "BRIEF_LOG", [[
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
-            mode.upper(),
-            consolidated[:500]  # truncate for sheet
+            datetime.now().strftime("%Y-%m-%d %H:%M"), mode.upper(),
+            model_a, model_b, model_v, consolidated[:400]
         ]])
     except Exception as e:
         print(f"  ⚠️ Brief log error: {e}")
