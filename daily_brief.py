@@ -17,8 +17,9 @@ from sheets import _service, SHEET_ID
 from notifier import send
 
 # ── Credentials ───────────────────────────────────────────────────────────────
-def _gemini_key(): return os.environ.get("GOOGLE_AI_API", os.environ.get("google_ai_api", ""))
-def _groq_key():   return os.environ.get("GROQ_API_KEY", "")
+def _gemini_key():  return os.environ.get("GOOGLE_AI_API", os.environ.get("google_ai_api", ""))
+def _gemini_key2(): return os.environ.get("GOOGLE_AI_API_2", "")  # Melveetil account fallback
+def _groq_key():    return os.environ.get("GROQ_API_KEY", "")
 
 
 # ── Data Fetcher ──────────────────────────────────────────────────────────────
@@ -207,25 +208,26 @@ Output exactly this format (no preamble, no explanation):
 
 
 def call_gemini(prompt: str) -> str:
-    key = _gemini_key()
-    if not key:
-        return "Gemini key not set"
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
-        r = requests.post(url, json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": 800,
-                "temperature": 0.3,
-                "thinkingConfig": {"thinkingBudget": 0}  # disable thinking to save tokens
-            }
-        }, timeout=30)
-        data = r.json()
-        if "candidates" not in data:
-            return f"Gemini error: {data.get('error', {}).get('message', str(data))[:100]}"
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        return f"Gemini error: {e}"
+    # Try primary key first, then Melveetil key as fallback
+    for key in [_gemini_key(), _gemini_key2()]:
+        if not key:
+            continue
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+            r = requests.post(url, json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "maxOutputTokens": 800,
+                    "temperature": 0.3,
+                    "thinkingConfig": {"thinkingBudget": 0}
+                }
+            }, timeout=30)
+            data = r.json()
+            if "candidates" in data:
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            continue
+    return "Gemini error: all keys exhausted"
 
 
 def call_groq(prompt: str) -> str:
