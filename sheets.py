@@ -87,6 +87,7 @@ def _ensure_tabs(svc, sid: str, needed: list):
 
 
 def _append(svc, sid, tab, rows):
+    """Append rows after header. Uses single API call — stays within rate limits."""
     if not rows:
         return
     svc.spreadsheets().values().append(
@@ -94,6 +95,15 @@ def _append(svc, sid, tab, rows):
         valueInputOption="RAW", insertDataOption="INSERT_ROWS",
         body={"values": rows}
     ).execute()
+
+
+def _get_sheet_id(svc, sid, tab_name: str) -> int:
+    """Get the numeric sheetId for a tab by name."""
+    meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
+    for s in meta["sheets"]:
+        if s["properties"]["title"] == tab_name:
+            return s["properties"]["sheetId"]
+    raise ValueError(f"Tab '{tab_name}' not found")
 
 
 def _upsert_tracker(svc, sid, rows):
