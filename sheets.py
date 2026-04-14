@@ -29,6 +29,8 @@ SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
 
 OI_HEADERS      = ["date", "symbol", "call_oi", "put_oi", "pc_oi_ratio"]
 
+SIGNAL_HISTORY_HEADERS = ["timestamp", "event_type", "symbol", "detail", "value", "prev_value"]
+
 EARNINGS_HEADERS = ["symbol", "earnings_date", "pre_pc_ratio", "pre_signal",
                     "pre_top_flow_k", "pre_sweep", "actual_eps_surprise",
                     "price_before", "price_after_1d", "price_change_pct",
@@ -71,10 +73,11 @@ def _ensure_tabs(svc, sid: str, needed: list):
 
     # Write headers to new tabs
     header_map = {
-        "SYMBOL_TRACKER": SUMMARY_HEADERS,
-        "UNUSUAL_ALERTS": ALERT_HEADERS,
-        "OI_SNAPSHOT":    OI_HEADERS,
+        "SYMBOL_TRACKER":  SUMMARY_HEADERS,
+        "UNUSUAL_ALERTS":  ALERT_HEADERS,
+        "OI_SNAPSHOT":     OI_HEADERS,
         "EARNINGS_TRACKER": EARNINGS_HEADERS,
+        "SIGNAL_HISTORY":  SIGNAL_HISTORY_HEADERS,
     }
     for tab in needed:
         if tab in existing:
@@ -181,6 +184,97 @@ def _signal(pc) -> str:
     if pc < 1.0:   return "🟡 Neutral"
     if pc < 1.5:   return "🟠 Cautious"
     return "🔴 Bearish"
+
+
+def detect_signal_events(svc, sid: str, results: list) -> list:
+    """
+    Detect 3 types of meaningful events. Returns rows for SIGNAL_HISTORY.
+
+    Event types:
+      SIGNAL_FLIP  — P/C crossed bullish/bearish threshold vs last scan
+      SWEEP_ALERT  — new sweep with score >= 8 (high conviction)
+      PERSISTENCE  — same $5M+ contract seen in UNUSUAL_ALERTS for 3+ days
+    """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    events = []
+
+    # ── Read previous SYMBOL_TRACKER state ──
+    r = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="SYMBOL_TRACKER!A:D"
+    ).execute()
+    prev_state = {}
+    for row in r.get("values", [])[1:]:
+        if len(row) >= 4:
+            try:
+                prev_state[row[1]] = float(row[3]) if row[3] else None
+            except ValueError:
+                pass
+
+    for res in results:
+        sym = res["symbol"]
+        pc_now  = res["pc_ratio"]
+        pc_prev = prev_state.get(sym)
+
+        # ── 1. SIGNAL FLIP ──
+        if pc_now and pc_prev:
+            def bucket(pc):
+                if pc < 0.6: return "bullish"
+                if pc < 1.5: return "neutral"
+                return "bearish"
+            b_now, b_prev = bucket(pc_now), bucket(pc_prev)
+            if b_now != b_prev:
+                arrow = "🟢" if b_now == "bullish" else ("🔴" if b_now == "bearish" else "🟡")
+                events.append([
+                    now, "SIGNAL_FLIP", sym,
+                    f"{arrow} {b_prev.upper()} → {b_now.upper()}",
+                    str(pc_now), str(pc_prev)
+                ])
+
+        # ── 2. SWEEP_ALERT (score >= 8) ──
+        for entry in res["calls"] + res["puts"]:
+            if entry.get("score", 0) >= 8 and entry.get("sweep"):
+                side = "🐂 CALL" if entry["type"] == "CALL" else "🐻 PUT"
+                events.append([
+                    now, "SWEEP_ALERT", sym,
+                    f"{side} ${entry['strike']:.0f} {entry['expiry']} ⭐{entry['score']}",
+                    f"${entry['premium']//1000}K", ""
+                ])
+
+    # ── 3. PERSISTENCE — contract seen 3+ days in UNUSUAL_ALERTS ──
+    r2 = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="UNUSUAL_ALERTS!A:F"
+    ).execute()
+    alert_rows = r2.get("values", [])[1:]
+    today = datetime.now().strftime("%Y-%m-%d")
+    three_days_ago = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+
+    from collections import Counter
+    contract_days = Counter()
+    for row in alert_rows:
+        if len(row) >= 5 and row[0][:10] >= three_days_ago:
+            key = f"{row[1]}-{row[2]}-{row[3]}-{row[4]}"  # sym-type-strike-expiry
+            contract_days[key].add(row[0][:10]) if isinstance(contract_days[key], set) else None
+
+    # Rebuild as sets properly
+    contract_day_sets = {}
+    for row in alert_rows:
+        if len(row) >= 5 and row[0][:10] >= three_days_ago:
+            key = f"{row[1]}-{row[2]}-{row[3]}-{row[4]}"
+            contract_day_sets.setdefault(key, set()).add(row[0][:10])
+
+    for key, days in contract_day_sets.items():
+        if len(days) >= 3 and today in days:
+            parts = key.split("-", 4)
+            if len(parts) >= 5:
+                sym, typ, strike, expiry = parts[0], parts[1], parts[2], parts[3]
+                side = "🐂" if typ == "CALL" else "🐻"
+                events.append([
+                    now, "PERSISTENCE", sym,
+                    f"{side} {typ} ${strike} {expiry} — {len(days)} days",
+                    f"{len(days)} days", ""
+                ])
+
+    return events
 
 
 def store_oi_snapshot(svc, sid: str, results: list):
@@ -379,8 +473,18 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
         store_oi_snapshot(svc, sid, results)
         oi_alerts = get_oi_changes(svc, sid, results)
 
+        # Detect and store signal events
+        _ensure_tabs(svc, sid, ["SIGNAL_HISTORY"])
+        signal_events = detect_signal_events(svc, sid, results)
+        if signal_events:
+            _append(svc, sid, "SIGNAL_HISTORY", signal_events)
+
         momentum = compare_scans(results, previous)
-        return momentum + oi_alerts
+        return momentum + oi_alerts + [
+            f"{'🔄' if e[1]=='SIGNAL_FLIP' else '🚨' if e[1]=='SWEEP_ALERT' else '📌'} "
+            f"*{e[2]}* {e[3]}"
+            for e in signal_events
+        ]
 
     except Exception as e:
         print(f"  ⚠️  Sheets error: {e}")
