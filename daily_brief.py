@@ -192,10 +192,33 @@ def run_brief(mode: str = "morning"):
     now = datetime.now().strftime("%b %d %H:%M")
 
     msg = f"*{emoji} AI {title} — {now}*\n\n"
+    # Strip ** bold markers that break Telegram Markdown v1
+    consolidated = consolidated.replace("**", "*")
     msg += consolidated
     msg += "\n\n_Based on options flow data only. Verify with technicals before trading. Not financial advice._"
 
-    send(msg)
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat  = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if not token or not chat:
+        print("⚠️  No Telegram credentials")
+        print(msg)
+        return
+
+    for chunk in [msg[i:i+4000] for i in range(0, len(msg), 4000)]:
+        r = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat, "text": chunk,
+                  "parse_mode": "Markdown", "disable_web_page_preview": True},
+            timeout=10,
+        )
+        if not r.ok:
+            print(f"Telegram error: {r.status_code} {r.text[:200]}")
+            # Retry without markdown
+            requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat, "text": chunk.replace("*","").replace("_","")},
+                timeout=10,
+            )
     print(f"✅ {title} sent.")
 
 
