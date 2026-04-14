@@ -103,23 +103,23 @@ EVENING_INSTRUCTION = """Write an EVENING DIGEST covering:
 4. Overall assessment: was today bullish or bearish for smart money?"""
 
 def call_hf(prompt: str) -> str:
-    """HuggingFace Inference API — used as verifier (different provider = better cross-check)."""
-    token = os.environ.get("HF_TOKEN", "")
-    if not token:
-        return call_groq(prompt)  # fallback to Groq if no HF token
+    """Verifier — uses Groq with smaller Llama model (different from analyst's 70B)."""
+    key = _groq_key()
+    if not key:
+        return call_gemini(prompt)
     try:
         r = requests.post(
-            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"inputs": prompt[:3000], "parameters": {"max_new_tokens": 600, "temperature": 0.2}},
-            timeout=30
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.1-8b-instant",  # smaller/faster model = different perspective
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 600, "temperature": 0.2
+            }, timeout=30
         )
-        result = r.json()
-        if isinstance(result, list):
-            return result[0].get("generated_text", "")[-600:]
-        return f"HF error: {str(result)[:100]}"
+        return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        return call_groq(prompt)  # fallback
+        return call_gemini(prompt)
 
 
 VERIFIER_PROMPT = """You are a senior options flow analyst verifying two junior analysts' reports.
