@@ -21,7 +21,8 @@ SUMMARY_HEADERS = ["last_updated", "symbol", "signal", "pc_ratio",
                    "call_vol", "put_vol", "top_call_k", "top_put_k"]
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
-                   "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal"]
+                   "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
+                   "price_at_alert", "score"]
 
 SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike"]
@@ -251,7 +252,7 @@ def compare_scans(current_results: list, previous: dict) -> list:
     return alerts
 
 
-def store_results(results: list) -> list:
+def store_results(results: list, prices: dict = None) -> list:
     try:
         svc = _service()
         sid = SHEET_ID
@@ -294,7 +295,11 @@ def store_results(results: list) -> list:
                 sym_rows.append(base)
 
                 if entry["premium"] >= ALERT_THRESHOLD_K * 1000 or entry.get("sweep"):
-                    alert_rows.append([now, sym] + base[1:] + [sig])
+                    alert_rows.append([now, sym] + base[1:] + [
+                        sig,
+                        prices.get(sym, "") if prices else "",
+                        entry.get("score", ""),
+                    ])
 
             symbol_rows[sym] = sym_rows
 
