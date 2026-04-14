@@ -267,9 +267,9 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
         # Get previous scan BEFORE writing new data
         previous = get_last_scan(svc, sid)
 
-        # Ensure all needed tabs exist — only for FIXED symbols, not dynamic
+        # Ensure tabs — only for fixed symbols, not dynamic screener stocks
         fixed_tabs = ["SYMBOL_TRACKER", "UNUSUAL_ALERTS", "OI_SNAPSHOT", "EARNINGS_TRACKER"]
-        fixed_syms = [r["symbol"] for r in results if r["symbol"] in ALL_SYMBOLS]
+        fixed_syms = [r["symbol"] for r in results if fixed_symbols is None or r["symbol"] in fixed_symbols]
         all_tabs = fixed_tabs + fixed_syms
         _ensure_tabs(svc, sid, all_tabs)
 
