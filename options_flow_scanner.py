@@ -37,33 +37,34 @@ def _tg_chat():  return os.environ.get("TELEGRAM_CHAT_ID", "")
 def score_alert(entry: dict) -> int:
     """
     Score an options alert 1–10 based on signal strength.
-    Only alerts scoring >= MIN_ALERT_SCORE get sent to Telegram.
 
-    Scoring:
-      +3  premium >= $10M
-      +2  premium >= $5M
-      +1  premium >= $1M
-      +2  sweep (large block, institutional urgency)
-      +2  iv_spike (buying urgency)
-      +2  0-7 DTE (expires this week = highest conviction)
-      +1  8-30 DTE
-      +1  delta < 0.4 (OTM = directional bet, not hedge)
+    +3  premium >= $10M
+    +2  premium >= $5M  (cumulative with above — capped)
+    +2  sweep (large block)
+    +2  iv_spike (buying urgency, calls only)
+    +2  0-7 DTE (expires this week)
+    +1  8-30 DTE
+    +1  OTM (delta < 0.4 for calls, > -0.4 for puts)
     """
     s = 0
     p = entry.get("premium", 0)
-    if p >= 10_000_000: s += 3
-    elif p >= 5_000_000: s += 2
-    elif p >= 1_000_000: s += 1
+    if p >= 20_000_000:  s += 5   # $20M+ = massive institutional
+    elif p >= 10_000_000: s += 4  # $10M+
+    elif p >= 5_000_000:  s += 3  # $5M+
+    elif p >= 1_000_000:  s += 2  # $1M+
+    elif p >= 100_000:    s += 1  # $100K+
 
     if entry.get("sweep"):    s += 2
     if entry.get("iv_spike"): s += 2
 
     dte = entry.get("dte", 99)
-    if dte <= 7:   s += 2
+    if dte <= 7:    s += 2
     elif dte <= 30: s += 1
 
-    delta = abs(entry.get("delta") or 1.0)
-    if delta < 0.4: s += 1
+    delta = entry.get("delta")
+    if delta is not None:
+        if entry.get("type") == "CALL" and delta < 0.4:   s += 1
+        elif entry.get("type") == "PUT" and delta > -0.4: s += 1
 
     return min(s, 10)
 
