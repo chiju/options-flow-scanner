@@ -198,11 +198,11 @@ def run_brief(mode: str = "morning"):
     title = "Morning Brief" if mode == "morning" else "Evening Digest"
     now = datetime.now().strftime("%b %d %H:%M")
 
-    msg = f"*{emoji} AI {title} — {now}*\n\n"
-    # Strip ** bold markers that break Telegram Markdown v1
-    consolidated = consolidated.replace("**", "*")
-    msg += consolidated
-    msg += "\n\n_Based on options flow data only. Verify with technicals before trading. Not financial advice._"
+    msg = f"🌅 AI {title} — {now}\n\n" if emoji == "🌅" else f"🌆 AI {title} — {now}\n\n"
+    # Strip all markdown to avoid Telegram parse errors
+    clean = consolidated.replace("**", "").replace("*", "•").replace("_", "")
+    msg += clean
+    msg += "\n\nBased on options flow data only. Verify with technicals before trading. Not financial advice."
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat  = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -214,18 +214,11 @@ def run_brief(mode: str = "morning"):
     for chunk in [msg[i:i+4000] for i in range(0, len(msg), 4000)]:
         r = requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat, "text": chunk,
-                  "parse_mode": "Markdown", "disable_web_page_preview": True},
+            json={"chat_id": chat, "text": chunk, "disable_web_page_preview": True},
             timeout=10,
         )
         if not r.ok:
-            print(f"Telegram error: {r.status_code} {r.text[:200]}")
-            # Retry without markdown
-            requests.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat, "text": chunk.replace("*","").replace("_","")},
-                timeout=10,
-            )
+            print(f"Telegram error: {r.status_code} {r.text[:100]}")
     print(f"✅ {title} sent.")
 
 
