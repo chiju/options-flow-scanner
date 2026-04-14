@@ -2,7 +2,7 @@ name: Options Flow Scanner
 
 on:
   schedule:
-    - cron: "*/5 14-20 * * 1-5"    # Every 5 min, 10am–4pm ET (UTC-4)
+    - cron: "*/15 14-20 * * 1-5"   # Every 15 min, 10am–4pm ET (more reliable than 5-min)
     - cron: "0 12 * * 1-5"          # Morning brief 8am ET
     - cron: "30 20 * * 1-5"         # Evening digest 4:30pm ET
     - cron: "0 13 * * 1-5"          # Pre-market scan 9am ET
@@ -20,7 +20,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     if: >
-      github.event.schedule == '*/5 14-20 * * 1-5' ||
+      github.event.schedule == '*/15 14-20 * * 1-5' ||
       github.event.schedule == '0 13 * * 1-5' ||
       github.event.schedule == '30 20 * * 1-5' ||
       github.event_name == 'workflow_dispatch'
