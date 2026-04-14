@@ -29,6 +29,11 @@ SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
 
 OI_HEADERS      = ["date", "symbol", "call_oi", "put_oi", "pc_oi_ratio"]
 
+EARNINGS_HEADERS = ["symbol", "earnings_date", "pre_pc_ratio", "pre_signal",
+                    "pre_top_flow_k", "pre_sweep", "actual_eps_surprise",
+                    "price_before", "price_after_1d", "price_change_pct",
+                    "flow_correct", "recorded_at"]
+
 
 def dte_bucket(dte: int) -> str:
     if dte <= 7:   return "0-7d 🔥"
@@ -68,6 +73,8 @@ def _ensure_tabs(svc, sid: str, needed: list):
     header_map = {
         "SYMBOL_TRACKER": SUMMARY_HEADERS,
         "UNUSUAL_ALERTS": ALERT_HEADERS,
+        "OI_SNAPSHOT":    OI_HEADERS,
+        "EARNINGS_TRACKER": EARNINGS_HEADERS,
     }
     for tab in needed:
         if tab in existing:

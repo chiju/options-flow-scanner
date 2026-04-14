@@ -9,6 +9,9 @@ from alpaca.data.requests import OptionChainRequest, StockLatestQuoteRequest
 import requests
 from sheets import store_results
 from earnings import get_earnings_this_week
+from earnings_tracker import snapshot_pre_earnings, update_post_earnings
+from alpaca.data.historical.screener import ScreenerClient
+from alpaca.data.requests import MostActivesRequest
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 INDEX_ETFS  = ["SPY", "QQQ", "IWM"]
@@ -67,6 +70,22 @@ def score_alert(entry: dict) -> int:
         elif entry.get("type") == "PUT" and delta > -0.4: s += 1
 
     return min(s, 10)
+
+
+def get_dynamic_symbols(top_n: int = 10) -> list:
+    """Get most active stocks via Alpaca Screener API — adds to watchlist dynamically."""
+    try:
+        screener = ScreenerClient(api_key=_key(), secret_key=_secret())
+        result = screener.get_most_actives(MostActivesRequest(top=top_n))
+        syms = [m.symbol for m in result.most_actives if hasattr(m, "symbol")]
+        # Filter out already-tracked symbols and non-optionable (low price)
+        new = [s for s in syms if s not in ALL_SYMBOLS and len(s) <= 5]
+        if new:
+            print(f"  📡 Screener added: {', '.join(new)}")
+        return new
+    except Exception as e:
+        print(f"  Screener error: {e}")
+        return []
 
 
 # ── Price Tracking ────────────────────────────────────────────────────────────
@@ -332,9 +351,12 @@ def run_scan(force_send: bool = False):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanning {len(ALL_SYMBOLS)} symbols...")
     client = OptionHistoricalDataClient(api_key=_key(), secret_key=_secret())
 
+    # Dynamically add most active stocks from Screener API
+    dynamic = get_dynamic_symbols(top_n=10)
+    scan_list = ALL_SYMBOLS + dynamic
+
     results = []
-    for sym in ALL_SYMBOLS:
-        print(f"  {sym}...", end=" ", flush=True)
+    for sym in scan_list:
         r = scan_symbol(client, sym)
         if r:
             results.append(r)
@@ -351,6 +373,29 @@ def run_scan(force_send: bool = False):
 
     # Store to sheets + get momentum
     momentum = store_results(results, prices)
+
+    # Earnings tracking — snapshot pre-earnings flow + update post-earnings results
+    if earnings:
+        try:
+            from sheets import _service, SHEET_ID
+            from sheets import _ensure_tabs, _append
+            svc = _service()
+            _ensure_tabs(svc, SHEET_ID, ["EARNINGS_TRACKER"])
+            # Snapshot pre-earnings flow for symbols reporting this week
+            snap_rows = []
+            for sym, date in earnings.items():
+                r = next((x for x in results if x["symbol"] == sym), None)
+                if r:
+                    row = snapshot_pre_earnings(sym, r)
+                    row[1] = date  # fill earnings_date
+                    snap_rows.append(row)
+            if snap_rows:
+                _append(svc, SHEET_ID, "EARNINGS_TRACKER", snap_rows)
+            # Update post-earnings results for symbols that already reported
+            for sym in ALL_SYMBOLS:
+                update_post_earnings(svc, SHEET_ID, sym)
+        except Exception as e:
+            print(f"  ⚠️  Earnings tracker error: {e}")
 
     # Duplicate suppression — only send if something new or forced
     if not force_send and not has_new_signals(results):
