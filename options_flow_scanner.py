@@ -15,9 +15,10 @@ from alpaca.data.requests import MostActivesRequest
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 INDEX_ETFS  = ["SPY", "QQQ", "IWM"]
-SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "GLD", "TLT", "ITA"]  # ITA = defence ETF
-DEFENCE     = ["LMT", "RTX", "NOC", "GD"]        # defence contractors
-CYBER       = ["CRWD", "PANW", "ZS"]              # cybersecurity (war = cyber attacks)
+SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "GLD", "TLT", "ITA",
+               "USO", "UUP", "XBI", "ARKK"]  # Oil, Dollar, Biotech, Innovation
+DEFENCE     = ["LMT", "RTX", "NOC", "GD"]
+CYBER       = ["CRWD", "PANW", "ZS"]
 PORTFOLIO   = ["MSFT","NVDA","AMZN","META","TSLA","PLTR","CRWV","IONQ","OKLO",
                "ACHR","DUOL","SOFI","PYPL","PATH","JOBY","UUUU","POET"]
 MEGA_CAPS   = ["AAPL","GOOGL","MSFT","NVDA","AMZN","META","TSLA"]
@@ -300,7 +301,7 @@ def format_report(results: list, earnings: dict = None,
 
     # Sector snapshot
     sector_line = []
-    for sym in ["XLK", "XLF", "XLE", "GLD", "TLT", "ITA"]:
+    for sym in ["XLK", "XLF", "XLE", "GLD", "TLT", "ITA", "USO", "UUP", "XBI"]:
         r = next((x for x in results if x["symbol"] == sym), None)
         if r and r["pc_ratio"]:
             sig = "🟢" if r["pc_ratio"] < 0.7 else ("🔴" if r["pc_ratio"] > 1.5 else "🟡")
