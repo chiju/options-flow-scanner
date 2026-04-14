@@ -226,6 +226,16 @@ def golden_flow(results: list) -> list:
                 entry["_sym"] = r["symbol"]
                 hits.append(entry)
     return sorted(hits, key=lambda x: x["premium"], reverse=True)
+
+
+def interpret_signal(result: dict) -> str:
+    pc = result["pc_ratio"]
+    if pc is None:  return "⚪ No data"
+    if pc < 0.3:    return "🔥 Very Bullish"
+    if pc < 0.6:    return "🟢 Bullish"
+    if pc < 1.0:    return "🟡 Neutral"
+    if pc < 1.5:    return "🟠 Cautious"
+    return "🔴 Bearish"
     pc = result["pc_ratio"]
     if pc is None:  return "⚪ No data"
     if pc < 0.3:    return "🔥 Very Bullish"
