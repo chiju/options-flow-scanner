@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: "*/15 14-20 * * 1-5"   # Every 15 min, 10am–4pm ET (more reliable than 5-min)
     - cron: "0 12 * * 1-5"          # Morning brief 8am ET
-    - cron: "30 20 * * 1-5"         # Evening digest 4:30pm ET
+    - cron: "30 20 * * 1-5"         # Evening digest + OI tracker 4:30pm ET
     - cron: "0 13 * * 1-5"          # Pre-market scan 9am ET
     - cron: "0 20 * * 5"            # Weekly summary every Friday 4pm ET
   workflow_dispatch:
@@ -94,3 +94,22 @@ jobs:
           GOOGLE_AI_API_2: ${{ secrets.GOOGLE_AI_API_2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+  oi-tracker:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.schedule == '30 20 * * 1-5' ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python oi_tracker.py
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_OPTIONS_SHEET_ID: ${{ secrets.GOOGLE_OPTIONS_SHEET_ID }}
