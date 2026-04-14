@@ -86,8 +86,58 @@ def _ensure_tabs(svc, sid: str, needed: list):
         ).execute()
 
 
+def _get_sheet_id(svc, sid, tab_name: str) -> int:
+    """Get the numeric sheetId for a tab by name (cached in meta)."""
+    meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
+    for s in meta["sheets"]:
+        if s["properties"]["title"] == tab_name:
+            return s["properties"]["sheetId"]
+    raise ValueError(f"Tab '{tab_name}' not found")
+
+
+def _prepend_batch(svc, sid, tab_rows: dict):
+    """
+    Prepend rows to multiple tabs in 2 API calls total (not 2 per tab).
+    tab_rows = {tab_name: [rows]}
+    """
+    if not tab_rows:
+        return
+
+    # Get all sheet IDs in one call
+    meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
+    sheet_ids = {s["properties"]["title"]: s["properties"]["sheetId"]
+                 for s in meta["sheets"]}
+
+    # Build batch insert requests (1 insertDimension per tab)
+    insert_requests = []
+    for tab, rows in tab_rows.items():
+        if tab not in sheet_ids or not rows:
+            continue
+        insert_requests.append({"insertDimension": {
+            "range": {"sheetId": sheet_ids[tab], "dimension": "ROWS",
+                      "startIndex": 1, "endIndex": 1 + len(rows)},
+            "inheritFromBefore": False
+        }})
+
+    if not insert_requests:
+        return
+
+    # Single batchUpdate for all insertions
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=sid, body={"requests": insert_requests}
+    ).execute()
+
+    # Single values.batchUpdate for all data
+    value_data = [{"range": f"{tab}!A2", "values": rows}
+                  for tab, rows in tab_rows.items() if rows]
+    svc.spreadsheets().values().batchUpdate(
+        spreadsheetId=sid,
+        body={"valueInputOption": "RAW", "data": value_data}
+    ).execute()
+
+
 def _append(svc, sid, tab, rows):
-    """Append rows after header. Uses single API call — stays within rate limits."""
+    """Single-tab append — used for UNUSUAL_ALERTS and summary tabs."""
     if not rows:
         return
     svc.spreadsheets().values().append(
@@ -95,15 +145,6 @@ def _append(svc, sid, tab, rows):
         valueInputOption="RAW", insertDataOption="INSERT_ROWS",
         body={"values": rows}
     ).execute()
-
-
-def _get_sheet_id(svc, sid, tab_name: str) -> int:
-    """Get the numeric sheetId for a tab by name."""
-    meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
-    for s in meta["sheets"]:
-        if s["properties"]["title"] == tab_name:
-            return s["properties"]["sheetId"]
-    raise ValueError(f"Tab '{tab_name}' not found")
 
 
 def _upsert_tracker(svc, sid, rows):
@@ -326,10 +367,10 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
         # Write everything
         _upsert_tracker(svc, sid, tracker_rows)
         _append(svc, sid, "UNUSUAL_ALERTS", alert_rows)
-        # Only write per-symbol tabs for fixed watchlist
-        for sym, rows in symbol_rows.items():
-            if fixed_symbols is None or sym in fixed_symbols:
-                _append(svc, sid, sym, rows)
+        # Prepend symbol rows in 2 API calls total (newest at top)
+        fixed_sym_rows = {sym: rows for sym, rows in symbol_rows.items()
+                          if fixed_symbols is None or sym in fixed_symbols}
+        _prepend_batch(svc, sid, fixed_sym_rows)
 
         total_sym_rows = sum(len(v) for v in symbol_rows.values())
         print(f"  📊 Sheets: {len(alert_rows)} alerts | {total_sym_rows} symbol rows | {len(tracker_rows)} tracker")
