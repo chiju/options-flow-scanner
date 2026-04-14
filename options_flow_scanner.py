@@ -194,7 +194,38 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
     }
 
 
-def interpret_signal(result: dict) -> str:
+def net_premium_sentiment(results: list) -> list:
+    """
+    Net premium = total call $ - total put $ per symbol.
+    Stronger signal than P/C ratio — weights by dollar size not contract count.
+    Returns list of (symbol, net_k, signal) sorted by absolute net value.
+    """
+    out = []
+    for r in results:
+        call_k = sum(e["premium"] for e in r["calls"]) // 1000
+        put_k  = sum(e["premium"] for e in r["puts"])  // 1000
+        net_k  = call_k - put_k
+        if abs(net_k) < 500:  # ignore if less than $500K net
+            continue
+        sig = "🐂 Bullish" if net_k > 0 else "🐻 Bearish"
+        out.append((r["symbol"], net_k, sig, call_k, put_k))
+    return sorted(out, key=lambda x: abs(x[1]), reverse=True)
+
+
+def golden_flow(results: list) -> list:
+    """
+    Golden Flow = premium >= $1M + sweep + score >= 8.
+    Highest conviction institutional signal — all three conditions must align.
+    """
+    hits = []
+    for r in results:
+        for entry in r["calls"] + r["puts"]:
+            if (entry["premium"] >= 1_000_000
+                    and entry.get("sweep")
+                    and entry.get("score", 0) >= 8):
+                entry["_sym"] = r["symbol"]
+                hits.append(entry)
+    return sorted(hits, key=lambda x: x["premium"], reverse=True)
     pc = result["pc_ratio"]
     if pc is None:  return "⚪ No data"
     if pc < 0.3:    return "🔥 Very Bullish"
@@ -272,6 +303,27 @@ def format_report(results: list, earnings: dict = None,
     if rotation:
         lines.append(rotation)
     lines.append("")
+
+    # ── Golden Flow (highest conviction: sweep + score≥8 + $1M+) ──
+    gf = golden_flow(results)
+    if gf:
+        lines.append("*⭐ Golden Flow* _(sweep + score≥8 + $1M+)_")
+        for f in gf[:5]:
+            side = "🐂 CALL" if f["type"] == "CALL" else "🐻 PUT"
+            lines.append(
+                f"{side} *{f['_sym']}* ${f['strike']:.0f} {f['expiry']}"
+                f"  ⭐{f['score']}  💰 *${f['premium']//1000}K* 🚨"
+            )
+        lines.append("")
+
+    # ── Net Premium Sentiment ──
+    net = net_premium_sentiment(results)
+    if net:
+        lines.append("*💵 Net Premium* _(call $ minus put $)_")
+        for sym, net_k, sig, call_k, put_k in net[:8]:
+            bar = "+" if net_k > 0 else ""
+            lines.append(f"  `{sym}` {sig}  {bar}${net_k:,}K")
+        lines.append("")
 
     # Top flows — only show score >= MIN_ALERT_SCORE
     all_unusual = []
