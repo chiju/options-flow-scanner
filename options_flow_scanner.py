@@ -189,6 +189,12 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
         iv_spike  = bool(iv_pct and iv_pct > IV_SPIKE_THRESH and cp == "C")
         sweep     = volume >= SWEEP_BLOCK_SIZE and cp == "C"
 
+        # Mid-price rule: trade at/above mid = buyer aggressive (BUY), below = seller (SELL)
+        buy_sell = ""
+        if snap.latest_trade and mid > 0:
+            last = snap.latest_trade.price or 0
+            buy_sell = "BUY" if last >= mid else "SELL"
+
         entry = {
             "symbol": sym, "contract": contract_sym,
             "type": "CALL" if cp == "C" else "PUT",
@@ -196,7 +202,7 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
             "volume": int(volume), "premium": int(premium),
             "delta": round(delta, 2) if delta else None,
             "iv": iv_pct, "mid": round(mid, 2),
-            "sweep": sweep, "iv_spike": iv_spike,
+            "sweep": sweep, "iv_spike": iv_spike, "buy_sell": buy_sell,
         }
         entry["score"] = score_alert(entry)
 
@@ -376,10 +382,11 @@ def format_report(results: list, earnings: dict = None,
             tags  = (" 🚨" if f.get("sweep") else "") + (" ⚡" if f.get("iv_spike") else "")
             iv_s  = f"  IV{f['iv']}%" if f["iv"] else ""
             score = f"  ⭐{f.get('score','?')}"
+            bs    = f"  {'📈BUY' if f.get('buy_sell')=='BUY' else '📉SELL' if f.get('buy_sell')=='SELL' else ''}"
             name  = SYMBOL_NAMES.get(f["_sym"], f["_sym"])
             lines.append(
                 f"{side} *{f['_sym']}* ({name}) ${f['strike']:.0f} {f['expiry']}"
-                f"  Vol {f['volume']:,}{iv_s}{score}"
+                f"  Vol {f['volume']:,}{iv_s}{score}{bs}"
                 f"  💰 *${f['premium']//1000}K*{tags}"
             )
         lines.append("")

@@ -22,7 +22,7 @@ SUMMARY_HEADERS = ["last_updated", "symbol", "signal", "pc_ratio",
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
-                   "price_at_alert", "score"]
+                   "price_at_alert", "score", "buy_sell"]
 
 SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike"]
@@ -452,6 +452,7 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
                         sig,
                         prices.get(sym, "") if prices else "",
                         entry.get("score", ""),
+                        entry.get("buy_sell", ""),
                     ])
 
             # Only store per-symbol tab for fixed watchlist (not dynamic screener stocks)
