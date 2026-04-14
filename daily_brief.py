@@ -103,19 +103,33 @@ EVENING_INSTRUCTION = """Write an EVENING DIGEST covering:
 4. Overall assessment: was today bullish or bearish for smart money?"""
 
 def call_hf(prompt: str) -> str:
-    """Verifier — uses Groq with smaller Llama model (different from analyst's 70B)."""
+    """Verifier — uses OpenRouter free models (3rd provider: different from Google + Groq).
+    Falls back to Groq 8B if no OpenRouter key."""
+    or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if or_key:
+        try:
+            r = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={"Authorization": f"Bearer {or_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "nvidia/nemotron-3-super-120b-a12b:free",  # free on OpenRouter
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 600, "temperature": 0.2
+                }, timeout=30
+            )
+            result = r.json()
+            if "choices" in result:
+                return result["choices"][0]["message"]["content"]
+        except Exception:
+            pass
+    # Fallback: Groq small model
     key = _groq_key()
-    if not key:
-        return call_gemini(prompt)
     try:
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={
-                "model": "llama-3.1-8b-instant",  # smaller/faster model = different perspective
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 600, "temperature": 0.2
-            }, timeout=30
+            json={"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 600, "temperature": 0.2}, timeout=30
         )
         return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
