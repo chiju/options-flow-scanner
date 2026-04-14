@@ -23,6 +23,25 @@ PORTFOLIO   = ["MSFT","NVDA","AMZN","META","TSLA","PLTR","CRWV","IONQ","OKLO",
                "ACHR","DUOL","SOFI","PYPL","PATH","JOBY","UUUU","POET"]
 MEGA_CAPS   = ["AAPL","GOOGL","MSFT","NVDA","AMZN","META","TSLA"]
 HIGH_VOL    = ["AMD","COIN","MSTR","HOOD","SMCI","ARM","SNOW"]
+SYMBOL_NAMES = {
+    # Indexes
+    "SPY": "S&P 500", "QQQ": "Nasdaq", "IWM": "Russell 2000",
+    # Sectors
+    "XLK": "Tech", "XLF": "Finance", "XLE": "Energy", "XLV": "Health",
+    "GLD": "Gold", "TLT": "Bonds", "ITA": "Defence",
+    "USO": "Oil", "UUP": "Dollar", "XBI": "Biotech", "ARKK": "Innovation",
+    # Defence
+    "LMT": "Lockheed", "RTX": "Raytheon", "NOC": "Northrop", "GD": "Gen Dynamics",
+    # Cyber
+    "CRWD": "CrowdStrike", "PANW": "Palo Alto", "ZS": "Zscaler",
+    # Mega caps
+    "AAPL": "Apple", "GOOGL": "Google", "MSFT": "Microsoft",
+    "NVDA": "Nvidia", "AMZN": "Amazon", "META": "Meta", "TSLA": "Tesla",
+    # High vol
+    "AMD": "AMD", "COIN": "Coinbase", "MSTR": "MicroStrategy",
+    "HOOD": "Robinhood", "SMCI": "SuperMicro", "ARM": "ARM", "SNOW": "Snowflake",
+}
+
 ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + SECTOR_ETFS + DEFENCE + CYBER + MEGA_CAPS + HIGH_VOL + PORTFOLIO))
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
@@ -305,7 +324,8 @@ def format_report(results: list, earnings: dict = None,
         r = next((x for x in results if x["symbol"] == sym), None)
         if r and r["pc_ratio"]:
             sig = "🟢" if r["pc_ratio"] < 0.7 else ("🔴" if r["pc_ratio"] > 1.5 else "🟡")
-            sector_line.append(f"{sym}{sig}{r['pc_ratio']}")
+            name = SYMBOL_NAMES.get(sym, sym)
+            sector_line.append(f"{name}{sig}{r['pc_ratio']}")
     if sector_line:
         lines.append("  ".join(sector_line))
 
@@ -332,8 +352,9 @@ def format_report(results: list, earnings: dict = None,
     if net:
         lines.append("*💵 Net Premium* _(call $ minus put $)_")
         for sym, net_k, sig, call_k, put_k in net[:8]:
-            bar = "+" if net_k > 0 else ""
-            lines.append(f"  `{sym}` {sig}  {bar}${net_k:,}K")
+            bar  = "+" if net_k > 0 else ""
+            name = SYMBOL_NAMES.get(sym, sym)
+            lines.append(f"  `{sym}` {name} {sig}  {bar}${net_k:,}K")
         lines.append("")
 
     # Top flows — only show score >= MIN_ALERT_SCORE
@@ -355,8 +376,9 @@ def format_report(results: list, earnings: dict = None,
             tags  = (" 🚨" if f.get("sweep") else "") + (" ⚡" if f.get("iv_spike") else "")
             iv_s  = f"  IV{f['iv']}%" if f["iv"] else ""
             score = f"  ⭐{f.get('score','?')}"
+            name  = SYMBOL_NAMES.get(f["_sym"], f["_sym"])
             lines.append(
-                f"{side} *{f['_sym']}* ${f['strike']:.0f} {f['expiry']}"
+                f"{side} *{f['_sym']}* ({name}) ${f['strike']:.0f} {f['expiry']}"
                 f"  Vol {f['volume']:,}{iv_s}{score}"
                 f"  💰 *${f['premium']//1000}K*{tags}"
             )
