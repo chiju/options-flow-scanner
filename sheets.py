@@ -259,7 +259,7 @@ def compare_scans(current_results: list, previous: dict) -> list:
     return alerts
 
 
-def store_results(results: list, prices: dict = None) -> list:
+def store_results(results: list, prices: dict = None, fixed_symbols: set = None) -> list:
     try:
         svc = _service()
         sid = SHEET_ID
@@ -267,8 +267,10 @@ def store_results(results: list, prices: dict = None) -> list:
         # Get previous scan BEFORE writing new data
         previous = get_last_scan(svc, sid)
 
-        # Ensure all needed tabs exist
-        all_tabs = ["SYMBOL_TRACKER", "UNUSUAL_ALERTS"] + [r["symbol"] for r in results]
+        # Ensure all needed tabs exist — only for FIXED symbols, not dynamic
+        fixed_tabs = ["SYMBOL_TRACKER", "UNUSUAL_ALERTS", "OI_SNAPSHOT", "EARNINGS_TRACKER"]
+        fixed_syms = [r["symbol"] for r in results if r["symbol"] in ALL_SYMBOLS]
+        all_tabs = fixed_tabs + fixed_syms
         _ensure_tabs(svc, sid, all_tabs)
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -308,13 +310,17 @@ def store_results(results: list, prices: dict = None) -> list:
                         entry.get("score", ""),
                     ])
 
-            symbol_rows[sym] = sym_rows
+            # Only store per-symbol tab for fixed watchlist (not dynamic screener stocks)
+            if sym in symbol_rows or True:  # always add to dict, filter at write time
+                symbol_rows[sym] = sym_rows
 
         # Write everything
         _upsert_tracker(svc, sid, tracker_rows)
         _append(svc, sid, "UNUSUAL_ALERTS", alert_rows)
+        # Only write per-symbol tabs for fixed watchlist
         for sym, rows in symbol_rows.items():
-            _append(svc, sid, sym, rows)
+            if fixed_symbols is None or sym in fixed_symbols:
+                _append(svc, sid, sym, rows)
 
         total_sym_rows = sum(len(v) for v in symbol_rows.values())
         print(f"  📊 Sheets: {len(alert_rows)} alerts | {total_sym_rows} symbol rows | {len(tracker_rows)} tracker")

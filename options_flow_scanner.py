@@ -81,7 +81,7 @@ def get_dynamic_symbols(top_n: int = 10) -> list:
         result = screener.get_most_actives(MostActivesRequest(top=top_n))
         syms = [m.symbol for m in result.most_actives if hasattr(m, "symbol")]
         # Filter out already-tracked symbols and non-optionable (low price)
-        new = [s for s in syms if s not in ALL_SYMBOLS and len(s) <= 5]
+        new = [s for s in syms if s not in ALL_SYMBOLS and len(s) <= 5 and not s.endswith('W')]
         if new:
             print(f"  📡 Screener added: {', '.join(new)}")
         return new
@@ -374,7 +374,7 @@ def run_scan(force_send: bool = False):
     earnings = get_earnings_this_week(ALL_SYMBOLS)
 
     # Store to sheets + get momentum
-    momentum = store_results(results, prices)
+    momentum = store_results(results, prices, fixed_symbols=set(ALL_SYMBOLS))
 
     # Earnings tracking — snapshot pre-earnings flow + update post-earnings results
     if earnings:
