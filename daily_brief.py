@@ -130,7 +130,7 @@ def call_gemini(prompt: str) -> str:
     if not key:
         return "Gemini key not set"
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
         r = requests.post(url, json={
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": 400, "temperature": 0.3}
