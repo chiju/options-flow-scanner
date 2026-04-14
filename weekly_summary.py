@@ -38,14 +38,17 @@ def run_weekly_summary():
     # Most active symbols
     sym_counts = Counter(r[1] for r in week_rows)
 
-    # Biggest flows
-    flows = []
+    # Biggest flows — deduplicated by contract (sym+type+strike+expiry), keep max premium
+    seen_contracts = {}
     for row in week_rows:
         try:
-            flows.append((int(row[7]), row[1], row[2], row[3], row[4]))  # premium_k, sym, type, strike, expiry
+            key = f"{row[1]}-{row[2]}-{row[3]}-{row[4]}"  # sym-type-strike-expiry
+            premium_k = int(row[7])
+            if key not in seen_contracts or premium_k > seen_contracts[key][0]:
+                seen_contracts[key] = (premium_k, row[1], row[2], row[3], row[4])
         except (ValueError, IndexError):
             continue
-    flows.sort(reverse=True)
+    flows = sorted(seen_contracts.values(), reverse=True)
 
     # Put vs Call split
     calls = [r for r in week_rows if r[2] == "CALL"]
