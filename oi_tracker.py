@@ -135,6 +135,14 @@ def run_oi_tracker(symbols: list):
 
     prev_oi = get_prev_oi(svc, SHEET_ID)
     today   = datetime.now().strftime("%Y-%m-%d")
+
+    # Guard: only run once per day
+    r_check = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="OI_SNAPSHOT!A2:A2").execute()
+    existing = (r_check.get("values") or [[""]])[0][0] if r_check.get("values") else ""
+    if existing == today:
+        print(f"  ⏭️  OI already collected for {today}, skipping.")
+        return
+
     all_rows = []
 
     for sym in symbols:
