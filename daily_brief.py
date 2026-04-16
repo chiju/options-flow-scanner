@@ -149,7 +149,33 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
     tracker = r3.get("values", [])
 
     # Top symbols from tracker for news fetch
-    # Historical context — last 3 days of outcomes + persistent signals
+    # Price trend — is the market actually up or down? (critical context)
+    price_trend = {}
+    try:
+        from alpaca.data.historical import StockHistoricalDataClient
+        from alpaca.data.requests import StockBarsRequest
+        from alpaca.data.timeframe import TimeFrame
+        import datetime as _dt
+        stock_client = StockHistoricalDataClient(api_key=_alpaca_key(), secret_key=_alpaca_secret())
+        key_syms = ["SPY", "QQQ", "IWM", "GLD", "TLT"]
+        bars = stock_client.get_stock_bars(StockBarsRequest(
+            symbol_or_symbols=key_syms, timeframe=TimeFrame.Day,
+            start=_dt.datetime.now() - _dt.timedelta(days=7),
+            end=_dt.datetime.now()
+        ))
+        df = bars.df
+        for sym in key_syms:
+            try:
+                sym_df = df.xs(sym, level="symbol")["close"]
+                if len(sym_df) >= 2:
+                    chg = round((sym_df.iloc[-1] - sym_df.iloc[-2]) / sym_df.iloc[-2] * 100, 2)
+                    chg5 = round((sym_df.iloc[-1] - sym_df.iloc[0]) / sym_df.iloc[0] * 100, 2)
+                    trend = "📈" if chg > 0 else "📉"
+                    price_trend[sym] = f"{trend} {chg:+.1f}% today, {chg5:+.1f}% 5d (${sym_df.iloc[-1]:.2f})"
+            except Exception:
+                pass
+    except Exception:
+        pass
     history_ctx = []
     try:
         # SIGNAL_OUTCOMES — what fired recently and was it right?
@@ -207,6 +233,7 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
         "reddit":  reddit,
         "gamma":   gamma,
         "history": history_ctx,
+        "price_trend": price_trend,
         "period":  f"Last {hours_back} hours",
         "timestamp": datetime.now().strftime("%b %d %H:%M"),
     }
@@ -215,6 +242,15 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
 def format_data_for_ai(data: dict, mode: str) -> str:
     """Format sheet data into a compact string for AI prompt."""
     lines = [f"=== OPTIONS FLOW DATA ({data['period']}) ===\n"]
+
+    # Price trend FIRST — critical context for interpreting flow
+    price_trend = data.get("price_trend", {})
+    if price_trend:
+        lines.append("--- PRICE TREND (actual market movement) ---")
+        lines.append("IMPORTANT: High put volume during a rally = hedging, NOT bearish signal")
+        for sym, trend in price_trend.items():
+            lines.append(f"{sym}: {trend}")
+        lines.append("")
 
     lines.append("--- SYMBOL TRACKER (current P/C ratios) ---")
     for row in data["tracker"][1:]:
@@ -329,12 +365,17 @@ DATA:
 
 Rules: Under 200 words. Cite exact $ amounts. Reference historical outcomes when relevant. Be direct — no hedging."""
 
-MORNING_INSTRUCTION = """MORNING BRIEF — use the HISTORICAL CONTEXT to tell the story, then today's data:
-1. STORY SO FAR: What positions have been building over multiple days? Are previous signals playing out or failing?
-2. TODAY'S BIGGEST SIGNAL: Single largest flow with direction and conviction level
-3. MARKET BIAS: Net bullish or bearish? (cite P/C ratios + whether persistent signals confirm)
-4. HIGHEST PROBABILITY SETUP: One specific trade idea — symbol, direction, why (flow + news + GEX alignment)
-Be direct. "ARKK calls swept 9x over 2 days = institutional conviction, expires tomorrow" not "ARKK may be worth watching"."""
+MORNING_INSTRUCTION = """MORNING BRIEF — use PRICE TREND first to interpret flow correctly:
+- If market is UP and puts are high → puts are HEDGES on longs, not bearish bets (ignore them)
+- If market is DOWN and calls are high → calls are HEDGES on shorts, not bullish bets (ignore them)
+- Only flag flow that goes AGAINST the price trend as a real directional signal
+
+Answer these 4 questions:
+1. PRICE CONTEXT: Is the market up or down today/this week? (from PRICE TREND section)
+2. REAL SIGNALS: Which flows are directional (against trend) vs hedges (with trend)?
+3. PERSISTENCE: What's being built over multiple days? (from HISTORICAL CONTEXT)
+4. HIGHEST PROBABILITY SETUP: One specific trade — symbol, direction, why it's not just a hedge
+Be direct. "SPY is up 2% this week, so IWM puts are likely hedges. The real signal is ARKK calls swept 9x while market rallies = conviction bet."""
 
 EVENING_INSTRUCTION = """EVENING DIGEST — use HISTORICAL CONTEXT to assess what happened:
 1. WHAT PLAYED OUT: Did today's signals confirm or reverse previous positions? (cite outcomes)
