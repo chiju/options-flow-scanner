@@ -15,9 +15,24 @@ from googleapiclient.discovery import build
 SCOPES    = ["https://www.googleapis.com/auth/spreadsheets"]
 SHEET_ID  = os.environ.get("GOOGLE_OPTIONS_SHEET_ID", "1zhF6uyyoJpfbcjQvTqIQ11hbLQ17fO_4mKv1W5H4q8g")
 
+SYMBOL_NAMES = {
+    "SPY":"S&P 500","QQQ":"Nasdaq","IWM":"Russell 2000","GLD":"Gold","TLT":"Bonds",
+    "XLK":"Tech ETF","XLF":"Finance ETF","XLE":"Energy ETF","XLV":"Health ETF",
+    "ITA":"Defence ETF","USO":"Oil","UUP":"Dollar","XBI":"Biotech","ARKK":"ARK Innovation",
+    "LMT":"Lockheed","RTX":"Raytheon","NOC":"Northrop","GD":"Gen Dynamics",
+    "CRWD":"CrowdStrike","PANW":"Palo Alto","ZS":"Zscaler",
+    "AAPL":"Apple","GOOGL":"Google","MSFT":"Microsoft","NVDA":"Nvidia",
+    "AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AMD":"AMD",
+    "COIN":"Coinbase","MSTR":"MicroStrategy","HOOD":"Robinhood",
+    "SMCI":"SuperMicro","ARM":"ARM","SNOW":"Snowflake",
+    "PLTR":"Palantir","CRWV":"CoreWeave","IONQ":"IonQ","OKLO":"Oklo",
+    "ACHR":"Archer","DUOL":"Duolingo","SOFI":"SoFi","PYPL":"PayPal",
+    "PATH":"UiPath","JOBY":"Joby","UUUU":"Energy Fuels","POET":"POET Tech",
+}
+
 ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
-SUMMARY_HEADERS = ["last_updated", "symbol", "signal", "pc_ratio",
+SUMMARY_HEADERS = ["last_updated", "symbol", "name", "signal", "pc_ratio",
                    "call_vol", "put_vol", "top_call_k", "top_put_k",
                    "price", "price_chg_1d_pct", "net_premium_k", "interpretation"]
 
@@ -461,11 +476,11 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
 
             # SYMBOL_TRACKER
             tracker_rows.append([
-                now, sym, sig, pc or "",
+                now, sym, SYMBOL_NAMES.get(sym, sym), sig, pc or "",
                 r["call_vol"], r["put_vol"],
                 r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
                 r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,
-                price, "", net_k, interp,  # price_chg filled by EOD job
+                price, "", net_k, interp,
             ])
 
             # UNUSUAL_ALERTS — only high-conviction flows
