@@ -356,35 +356,42 @@ ANALYST_1_CHAIN = ["gemini", "groq-70b", "openrouter"]   # Gemini first (best qu
 ANALYST_2_CHAIN = ["groq-70b", "openrouter", "gemini"]   # Groq first (fastest)
 VERIFIER_CHAIN  = ["openrouter", "groq-8b", "gemini"]    # OpenRouter first (3rd provider)
 
-ANALYST_PROMPT = """You are an institutional options flow analyst with memory of recent signals. Analyze ONLY the data provided.
+ANALYST_PROMPT = """You are an institutional options flow analyst. Analyze ONLY the data provided. Think step by step before concluding.
 
-Always write full name + ticker: "ARK Innovation (ARKK)", "S&P 500 (SPY)", "Gold (GLD)", "Nasdaq (QQQ)", "Russell 2000 (IWM)", "Microsoft (MSFT)", "Nvidia (NVDA)", "Tesla (TSLA)", "Amazon (AMZN)", "Apple (AAPL)", "Meta (META)", "Palantir (PLTR)", "CoreWeave (CRWV)", "Coinbase (COIN)", "Tech ETF (XLK)", "Finance ETF (XLF)", "Energy ETF (XLE)", "Bonds (TLT)", "Defence ETF (ITA)". Never use ticker alone.
+Symbol names — always write "Full Name (TICKER)": S&P 500 (SPY), Nasdaq (QQQ), Russell 2000 (IWM), Gold (GLD), Bonds (TLT), ARK Innovation (ARKK), Tech ETF (XLK), Finance ETF (XLF), Energy ETF (XLE), Health ETF (XLV), Defence ETF (ITA), Oil (USO), Biotech (XBI), Microsoft (MSFT), Nvidia (NVDA), Tesla (TSLA), Amazon (AMZN), Apple (AAPL), Meta (META), Google (GOOGL), Palantir (PLTR), CoreWeave (CRWV), Coinbase (COIN), MicroStrategy (MSTR).
 
 {mode_instruction}
 
 DATA:
-{data}
+{data}"""
 
-Rules: Under 200 words. Cite exact $ amounts. Reference historical outcomes when relevant. Be direct."""
+MORNING_INSTRUCTION = """MORNING BRIEF — reason step by step, then write the brief:
 
-MORNING_INSTRUCTION = """MORNING BRIEF — use PRICE TREND first to interpret flow correctly:
-- If market is UP and puts are high → puts are HEDGES on longs, not bearish bets (ignore them)
-- If market is DOWN and calls are high → calls are HEDGES on shorts, not bullish bets (ignore them)
-- Only flag flow that goes AGAINST the price trend as a real directional signal
+STEP 1 — READ PRICE TREND: Is the market up or down today and this week?
+STEP 2 — FILTER HEDGES: High put volume when market is UP = hedges (ignore). High call volume when market is DOWN = hedges (ignore). Only keep flow that goes AGAINST the price trend.
+STEP 3 — CHECK HISTORY: What signals fired in the last 3 days? Were they right or wrong? What's being built persistently (3+ days same contract)?
+STEP 4 — SCORE CONFLUENCE: For each remaining signal, count: (a) flow direction matches price trend? (b) news sentiment agrees? (c) GEX negative = move will be amplified?
+STEP 5 — WRITE BRIEF: Based on steps 1-4, write 4 short paragraphs:
+  Para 1: Market context (price trend + overall bias)
+  Para 2: The real signals (not hedges) with exact $ amounts
+  Para 3: What's being built persistently and historical accuracy
+  Para 4: Single highest-conviction setup with reasoning
 
-Answer these 4 questions:
-1. PRICE CONTEXT: Is the market up or down today/this week? (from PRICE TREND section)
-2. REAL SIGNALS: Which flows are directional (against trend) vs hedges (with trend)?
-3. PERSISTENCE: What's being built over multiple days? (from HISTORICAL CONTEXT)
-4. HIGHEST PROBABILITY SETUP: One specific trade — symbol, direction, why it's not just a hedge
-Be direct. Example: "Market is up 2% this week, so index puts are likely hedges. The real signal is [SYMBOL] calls swept Nx while market rallies = conviction bet." Apply this logic to the actual data."""
+Under 200 words. Cite exact $ amounts. No vague statements."""
 
-EVENING_INSTRUCTION = """EVENING DIGEST — use HISTORICAL CONTEXT to assess what happened:
-1. WHAT PLAYED OUT: Did today's signals confirm or reverse previous positions? (cite outcomes)
-2. POSITION CHANGES: Any new large positions opened? Any old ones closing (OI decreasing)?
-3. WHAT'S BEING BUILT: Contracts appearing 3+ times = someone accumulating — name them
-4. TOMORROW'S SETUP: Based on persistent signals + today's flow, what is the highest-conviction play?
-Be direct. Reference specific $ amounts and whether signals were right or wrong."""
+EVENING_INSTRUCTION = """EVENING DIGEST — reason step by step, then write the digest:
+
+STEP 1 — WHAT HAPPENED TODAY: Check price trend. Did the market move with or against the morning's signals?
+STEP 2 — SCORE OUTCOMES: For each signal from HISTORICAL CONTEXT — was it correct (✅) or wrong (❌)? What does this tell us about that signal type?
+STEP 3 — NEW POSITIONS: What large flows appeared today? Are they opening (new positions) or closing (OI decreasing)?
+STEP 4 — PERSISTENCE CHECK: What contracts appeared 3+ times today or over multiple days? This = institutional accumulation.
+STEP 5 — WRITE DIGEST: 4 short paragraphs:
+  Para 1: What happened today vs what was expected
+  Para 2: Signal accuracy — what worked, what didn't
+  Para 3: Positions being built (persistent signals)
+  Para 4: Tomorrow's highest-conviction setup
+
+Under 200 words. Cite exact $ amounts."""
 
 def call_hf(prompt: str) -> str:
     """Verifier - uses OpenRouter free models (3rd provider).
@@ -420,13 +427,12 @@ def call_hf(prompt: str) -> str:
         return call_gemini(prompt)
 
 
-VERIFIER_PROMPT = """You are a senior options flow analyst. Two junior analysts have reviewed the same data.
-Your job: produce ONE clean consolidated report. Do not show your reasoning process.
+VERIFIER_PROMPT = """You are a senior options flow analyst. Two analysts reviewed the same data. Your job: consolidate into ONE actionable report.
 
-RULES (follow strictly):
-- Only include claims supported by the RAW DATA below
-- Mark any claim not in raw data as [UNVERIFIED]
-- Output ONLY the 4 sections below, nothing else
+STEP 1: Check which claims are in RAW DATA. Mark anything not in raw data as [UNVERIFIED].
+STEP 2: Where analysts agree AND data supports it → CONSENSUS.
+STEP 3: Where they disagree → pick the one supported by raw data, or mark UNCERTAIN.
+STEP 4: Write FINAL BRIEF — be decisive. If data shows X, say X. Don't hedge with "may" or "could".
 
 ANALYST 1: {analysis_a}
 
@@ -434,19 +440,19 @@ ANALYST 2: {analysis_b}
 
 RAW DATA: {data}
 
-Output exactly this format (no preamble, no explanation):
+Output exactly (no preamble):
 
 ✅ CONSENSUS:
-[bullet points both analysts agree on, verified in raw data]
+[verified facts both agree on]
 
 ⚠️ UNCERTAIN:
-[claims they disagree on, or marked [UNVERIFIED]]
+[genuine disagreements or unverified claims only — keep short]
 
 💡 UNIQUE FINDINGS:
-[data-supported insight from only one analyst]
+[one data-supported insight only one analyst caught]
 
-📊 FINAL BRIEF (120 words max):
-[clean actionable summary — what happened, what to watch, market bias]"""
+📊 FINAL BRIEF (150 words max):
+[decisive summary: market context, real signals (not hedges), persistent positions, one specific setup with reasoning]"""
 
 
 def call_gemini(prompt: str) -> str:
