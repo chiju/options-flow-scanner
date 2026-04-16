@@ -462,24 +462,24 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
             put_k  = sum(e["premium"] for e in r["puts"])  // 1000
             net_k  = call_k - put_k
 
-            # Price context
-            price = prices.get(sym, "") if prices else ""
-
-            # Interpretation = P/C + net premium together (no price needed)
-            interp = ""
-            if pc:
-                if pc > 1.3 and net_k > 0:    interp = "🛡️ Hedging"       # puts by count, calls by $
-                elif pc > 1.3 and net_k < 0:   interp = "😨 Fear"          # puts dominate both ways
-                elif pc > 1.3:                  interp = "😨 Fear"          # puts dominate, net unclear
-                elif pc < 0.7 and net_k > 0:   interp = "🔥 Greed"         # calls dominate both ways
-                elif pc < 0.7 and net_k < 0:   interp = "⚠️ Complacency"   # calls by count, puts by $
-                elif pc < 0.7:                  interp = "🔥 Greed"
-                elif net_k > 5000:              interp = "🟢 Call bias"     # neutral P/C but call $ dominates
-                elif net_k < -5000:             interp = "🔴 Put bias"      # neutral P/C but put $ dominates
-                else:                           interp = "⚪ Neutral"
-
+            # Price context — fetch before interpretation
             price     = prices.get(sym, "") if prices else ""
             price_chg = price_changes.get(sym, "") if price_changes else ""
+
+            # Interpretation = P/C + price direction (all three together)
+            interp = ""
+            if pc:
+                up = isinstance(price_chg, (int, float)) and price_chg > 0
+                dn = isinstance(price_chg, (int, float)) and price_chg < 0
+                if pc > 1.3 and up:    interp = "🛡️ Hedging"     # puts while price rising = protecting longs
+                elif pc > 1.3 and dn:  interp = "😨 Fear"         # puts while price falling = real bearish
+                elif pc > 1.3:         interp = "😨 Fear"          # puts dominate, no price data
+                elif pc < 0.7 and up:  interp = "🔥 Greed"        # calls while price rising = pure bullish
+                elif pc < 0.7 and dn:  interp = "⚠️ Complacency"  # calls while price falling = ignoring risk
+                elif pc < 0.7:         interp = "🔥 Greed"
+                elif net_k > 5000:     interp = "🟢 Call bias"
+                elif net_k < -5000:    interp = "🔴 Put bias"
+                else:                  interp = "⚪ Neutral"
 
             # SYMBOL_TRACKER — interpretation right after name
             tracker_rows.append([
