@@ -465,6 +465,7 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
             # Price context — fetch before interpretation
             price     = prices.get(sym, "") if prices else ""
             price_chg = price_changes.get(sym, "") if price_changes else ""
+            price_chg_display = price_changes.get(f"{sym}_display", price_chg) if price_changes else ""
 
             # Interpretation = P/C + price direction (all three together)
             interp = ""
@@ -484,7 +485,7 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
             # SYMBOL_TRACKER — interpretation right after name
             tracker_rows.append([
                 now, sym, SYMBOL_NAMES.get(sym, sym), interp,
-                pc or "", net_k, price, price_chg,
+                pc or "", net_k, price, price_chg_display,
                 r["call_vol"], r["put_vol"],
                 r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
                 r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,

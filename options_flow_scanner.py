@@ -133,21 +133,33 @@ def get_price_changes(symbols: list) -> dict:
     """Fetch 1d % price change using yfinance (free)."""
     try:
         import yfinance as yf
+        from datetime import timezone
         result = {}
         tickers = yf.download(symbols, period="2d", progress=False, auto_adjust=True)
         close = tickers["Close"]
-        if hasattr(close, "columns"):  # multiple symbols
+
+        # Market status
+        now_utc = datetime.now(timezone.utc)
+        utc_h, utc_m = now_utc.hour, now_utc.minute
+        market_open = (utc_h == 13 and utc_m >= 30) or (14 <= utc_h <= 19) or (utc_h == 20 and utc_m == 0)
+        suffix = " (live)" if market_open else " (close)"
+
+        if hasattr(close, "columns"):
             for sym in symbols:
                 try:
                     s = close[sym].dropna()
                     if len(s) >= 2:
-                        result[sym] = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
+                        chg = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
+                        result[sym] = chg  # store as float for interpretation logic
+                        result[f"{sym}_display"] = f"{chg:+.2f}%{suffix}"
                 except Exception:
                     pass
-        else:  # single symbol
+        else:
             s = close.dropna()
             if len(s) >= 2:
-                result[symbols[0]] = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
+                chg = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
+                result[symbols[0]] = chg
+                result[f"{symbols[0]}_display"] = f"{chg:+.2f}%{suffix}"
         return result
     except Exception as e:
         print(f"  Price change error: {e}")
