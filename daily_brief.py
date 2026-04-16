@@ -268,7 +268,7 @@ def format_data_for_ai(data: dict, mode: str) -> str:
     # ALERT_HEADERS: timestamp(0) symbol(1) type(2) strike(3) expiry(4) dte_bucket(5)
     #   volume(6) premium_k(7) iv(8) delta(9) sweep(10) iv_spike(11) signal(12)
     #   price_at_alert(13) score(14) buy_sell(15) oi(16) vol_oi_ratio(17)
-    for row in data["alerts"][:20]:
+    for row in data["alerts"][:15]:  # cap at 15 to leave room for GEX/news
         if len(row) >= 8:
             score = row[14] if len(row) > 14 else ""
             sweep = "SWEEP" if len(row) > 10 and row[10] == "YES" else ""
@@ -429,6 +429,8 @@ def call_hf(prompt: str) -> str:
 
 VERIFIER_PROMPT = """You are a senior options flow analyst. Two analysts reviewed the same data. Your job: consolidate into ONE actionable report.
 
+Always write "Full Name (TICKER)": S&P 500 (SPY), Nasdaq (QQQ), Russell 2000 (IWM), Gold (GLD), Bonds (TLT), ARK Innovation (ARKK), Tech ETF (XLK), Finance ETF (XLF), Energy ETF (XLE), Health ETF (XLV), Defence ETF (ITA), Microsoft (MSFT), Nvidia (NVDA), Tesla (TSLA), Amazon (AMZN), Apple (AAPL), Meta (META), Palantir (PLTR), CoreWeave (CRWV), Coinbase (COIN). Never use ticker alone.
+
 STEP 1: Check which claims are in RAW DATA. Mark anything not in raw data as [UNVERIFIED].
 STEP 2: Where analysts agree AND data supports it → CONSENSUS.
 STEP 3: Where they disagree → pick the one supported by raw data, or mark UNCERTAIN.
@@ -518,7 +520,7 @@ def run_brief(mode: str = "morning"):
     # Verifier consolidates using 3rd-priority chain
     print("  Calling verifier...")
     verifier_prompt = VERIFIER_PROMPT.format(
-        analysis_a=analysis_a, analysis_b=analysis_b, data=data_str[:4000]
+        analysis_a=analysis_a, analysis_b=analysis_b, data=data_str[:5500]
     )
     consolidated, model_v = call_with_fallback(verifier_prompt, VERIFIER_CHAIN)
     print(f"  Models used: A1={model_a} A2={model_b} V={model_v}")
