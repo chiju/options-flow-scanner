@@ -32,9 +32,24 @@ SYMBOL_NAMES = {
 
 ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
-SUMMARY_HEADERS = ["last_updated", "symbol", "name", "interpretation",
+SUMMARY_HEADERS = ["last_updated", "symbol", "name", "type", "interpretation",
                    "pc_ratio", "net_premium_k", "price", "price_chg_1d_pct",
                    "call_vol", "put_vol", "top_call_k", "top_put_k"]
+
+SYMBOL_TYPES = {
+    "SPY":"Index ETF","QQQ":"Index ETF","IWM":"Index ETF",
+    "XLK":"Sector ETF","XLF":"Sector ETF","XLE":"Sector ETF","XLV":"Sector ETF",
+    "GLD":"Sector ETF","TLT":"Sector ETF","ITA":"Sector ETF","USO":"Sector ETF",
+    "UUP":"Sector ETF","XBI":"Sector ETF","ARKK":"Sector ETF",
+    "LMT":"Stock","RTX":"Stock","NOC":"Stock","GD":"Stock",
+    "CRWD":"Stock","PANW":"Stock","ZS":"Stock",
+    "AAPL":"Stock","GOOGL":"Stock","MSFT":"Stock","NVDA":"Stock",
+    "AMZN":"Stock","META":"Stock","TSLA":"Stock","AMD":"Stock",
+    "COIN":"Stock","MSTR":"Stock","HOOD":"Stock","SMCI":"Stock","ARM":"Stock","SNOW":"Stock",
+    "PLTR":"Stock","CRWV":"Stock","IONQ":"Stock","OKLO":"Stock",
+    "ACHR":"Stock","DUOL":"Stock","SOFI":"Stock","PYPL":"Stock",
+    "PATH":"Stock","JOBY":"Stock","UUUU":"Stock","POET":"Stock",
+}
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
@@ -508,7 +523,7 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
 
             # SYMBOL_TRACKER — interpretation right after name
             tracker_rows.append([
-                now, sym, SYMBOL_NAMES.get(sym, sym), interp,
+                now, sym, SYMBOL_NAMES.get(sym, sym), SYMBOL_TYPES.get(sym, "Stock"), interp,
                 pc or "", net_k, price, price_chg_display,
                 r["call_vol"], r["put_vol"],
                 r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
