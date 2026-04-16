@@ -32,9 +32,9 @@ SYMBOL_NAMES = {
 
 ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
-SUMMARY_HEADERS = ["last_updated", "symbol", "name", "pc_ratio",
-                   "call_vol", "put_vol", "top_call_k", "top_put_k",
-                   "price", "price_chg_1d_pct", "net_premium_k", "interpretation"]
+SUMMARY_HEADERS = ["last_updated", "symbol", "name", "interpretation",
+                   "pc_ratio", "net_premium_k", "price", "price_chg_1d_pct",
+                   "call_vol", "put_vol", "top_call_k", "top_put_k"]
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
@@ -439,7 +439,7 @@ def compare_scans(current_results: list, previous: dict) -> list:
     return alerts
 
 
-def store_results(results: list, prices: dict = None, fixed_symbols: set = None) -> list:
+def store_results(results: list, prices: dict = None, price_changes: dict = None, fixed_symbols: set = None) -> list:
     try:
         svc = _service()
         sid = SHEET_ID
@@ -478,13 +478,16 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
                 elif net_k < -5000:             interp = "🔴 Put bias"      # neutral P/C but put $ dominates
                 else:                           interp = "⚪ Neutral"
 
-            # SYMBOL_TRACKER
+            price     = prices.get(sym, "") if prices else ""
+            price_chg = price_changes.get(sym, "") if price_changes else ""
+
+            # SYMBOL_TRACKER — interpretation right after name
             tracker_rows.append([
-                now, sym, SYMBOL_NAMES.get(sym, sym), pc or "",
+                now, sym, SYMBOL_NAMES.get(sym, sym), interp,
+                pc or "", net_k, price, price_chg,
                 r["call_vol"], r["put_vol"],
                 r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
                 r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,
-                price, "", net_k, interp,
             ])
 
             # UNUSUAL_ALERTS — only high-conviction flows

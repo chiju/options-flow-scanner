@@ -129,6 +129,31 @@ def get_current_prices(symbols: list) -> dict:
         return {}
 
 
+def get_price_changes(symbols: list) -> dict:
+    """Fetch 1d % price change using yfinance (free)."""
+    try:
+        import yfinance as yf
+        result = {}
+        tickers = yf.download(symbols, period="2d", progress=False, auto_adjust=True)
+        close = tickers["Close"]
+        if hasattr(close, "columns"):  # multiple symbols
+            for sym in symbols:
+                try:
+                    s = close[sym].dropna()
+                    if len(s) >= 2:
+                        result[sym] = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
+                except Exception:
+                    pass
+        else:  # single symbol
+            s = close.dropna()
+            if len(s) >= 2:
+                result[symbols[0]] = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
+        return result
+    except Exception as e:
+        print(f"  Price change error: {e}")
+        return {}
+
+
 # ── VIX Fetch ─────────────────────────────────────────────────────────────────
 def get_vix() -> float | None:
     """Fetch VIX from Yahoo Finance (free)."""
@@ -525,12 +550,13 @@ def run_scan(force_send: bool = False):
         return
 
     # Fetch VIX + prices + earnings in parallel-ish
-    vix      = get_vix()
-    prices   = get_current_prices([r["symbol"] for r in results])
+    vix           = get_vix()
+    prices        = get_current_prices([r["symbol"] for r in results])
+    price_changes = get_price_changes([r["symbol"] for r in results])
     earnings = get_earnings_this_week(ALL_SYMBOLS)
 
     # Store to sheets + get momentum
-    momentum = store_results(results, prices, fixed_symbols=set(ALL_SYMBOLS))
+    momentum = store_results(results, prices, price_changes=price_changes, fixed_symbols=set(ALL_SYMBOLS))
 
     # Earnings tracking — snapshot pre-earnings flow + update post-earnings results
     if earnings:
