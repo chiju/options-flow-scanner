@@ -138,10 +138,11 @@ def get_price_changes(symbols: list) -> dict:
         tickers = yf.download(symbols, period="2d", progress=False, auto_adjust=True)
         close = tickers["Close"]
 
-        # Market status
-        now_utc = datetime.now(timezone.utc)
-        utc_h, utc_m = now_utc.hour, now_utc.minute
-        market_open = (utc_h == 13 and utc_m >= 30) or (14 <= utc_h <= 19) or (utc_h == 20 and utc_m == 0)
+        # Market status using proper timezone
+        import pytz
+        et_now = datetime.now(pytz.timezone('America/New_York'))
+        et_mins = et_now.hour * 60 + et_now.minute
+        market_open = et_now.weekday() < 5 and 570 <= et_mins < 960  # 9:30am-4pm ET, Mon-Fri
         suffix = " (live)" if market_open else " (close)"
 
         if hasattr(close, "columns"):
