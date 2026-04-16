@@ -18,7 +18,8 @@ SHEET_ID  = os.environ.get("GOOGLE_OPTIONS_SHEET_ID", "1zhF6uyyoJpfbcjQvTqIQ11hb
 ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
 SUMMARY_HEADERS = ["last_updated", "symbol", "signal", "pc_ratio",
-                   "call_vol", "put_vol", "top_call_k", "top_put_k"]
+                   "call_vol", "put_vol", "top_call_k", "top_put_k",
+                   "price", "price_chg_1d_pct", "net_premium_k", "interpretation"]
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
@@ -441,12 +442,30 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
             pc  = r["pc_ratio"]
             sig = _signal(pc)
 
+            # Net premium = call $ - put $ (stronger signal than P/C count)
+            call_k = sum(e["premium"] for e in r["calls"]) // 1000
+            put_k  = sum(e["premium"] for e in r["puts"])  // 1000
+            net_k  = call_k - put_k
+
+            # Price context
+            price = prices.get(sym, "") if prices else ""
+
+            # Interpretation = P/C + price direction together
+            interp = ""
+            if pc and price:
+                # We don't have prev price here, use net premium as proxy
+                if pc > 1.3 and net_k > 0:   interp = "🛡️ Hedging"      # puts high but calls dominate $
+                elif pc > 1.3 and net_k < 0:  interp = "😨 Fear"         # puts high and put $ dominates
+                elif pc < 0.7 and net_k > 0:  interp = "🔥 Greed"        # calls dominate both ways
+                elif pc < 0.7 and net_k < 0:  interp = "⚠️ Complacency"  # calls by count, puts by $
+
             # SYMBOL_TRACKER
             tracker_rows.append([
                 now, sym, sig, pc or "",
                 r["call_vol"], r["put_vol"],
                 r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
                 r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,
+                price, "", net_k, interp,  # price_chg filled by EOD job
             ])
 
             # UNUSUAL_ALERTS — only high-conviction flows
