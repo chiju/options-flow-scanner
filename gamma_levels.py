@@ -58,7 +58,9 @@ def calc_gamma_levels(chain: dict, symbol: str, spot: float) -> list:
 
             # Use volume as OI proxy (Alpaca chain doesn't expose OI directly)
             oi = int(snap.latest_trade.size) if snap.latest_trade and snap.latest_trade.size else 0
-            gamma = snap.greeks.gamma if snap.greeks and snap.greeks.gamma else 0.0
+            gamma = snap.greeks.gamma if snap.greeks and snap.greeks.gamma else None
+            if gamma is None:
+                continue  # skip 0DTE — greeks not available, gamma unreliable anyway
 
             # GEX = gamma × OI × 100 × spot² (dollar gamma per 1% move)
             gex = gamma * oi * 100 * (spot ** 2) / 100

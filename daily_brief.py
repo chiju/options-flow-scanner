@@ -17,8 +17,41 @@ from sheets import _service, SHEET_ID
 from notifier import send
 
 # ── Credentials ───────────────────────────────────────────────────────────────
+def _gemini_key():    return os.environ.get("GOOGLE_AI_API", os.environ.get("google_ai_api", ""))
+def _gemini_key2():   return os.environ.get("GOOGLE_AI_API_2", "")
+def _groq_key():      return os.environ.get("GROQ_API_KEY", "")
 def _alpaca_key():    return os.environ.get("ALPACA_API_KEY", "")
 def _alpaca_secret(): return os.environ.get("ALPACA_SECRET_KEY", "")
+
+
+# ── Reddit Sentiment (free, no API key) ───────────────────────────────────────
+def fetch_reddit_sentiment(symbols: list) -> dict:
+    """Scrape WSB/stocks/investing for symbol mentions. No API key needed."""
+    from collections import defaultdict
+    results = defaultdict(lambda: {"mentions": 0, "bullish": 0, "bearish": 0})
+    bull_words = {"buy", "calls", "moon", "bullish", "long", "breakout", "squeeze"}
+    bear_words = {"sell", "puts", "short", "bearish", "crash", "dump", "downside"}
+
+    for sub in ["wallstreetbets", "stocks", "investing"]:
+        try:
+            r = requests.get(
+                f"https://www.reddit.com/r/{sub}/hot.json?limit=25",
+                headers={"User-Agent": "OptionsBot/1.0"}, timeout=8
+            )
+            if not r.ok: continue
+            for post in r.json()["data"]["children"]:
+                d = post["data"]
+                title = d.get("title", "").upper()
+                text = (d.get("selftext", "") + " " + title).lower()
+                for sym in symbols:
+                    if f"${sym}" in title or f" {sym} " in f" {title} ":
+                        results[sym]["mentions"] += 1
+                        words = set(text.split())
+                        if words & bull_words: results[sym]["bullish"] += 1
+                        elif words & bear_words: results[sym]["bearish"] += 1
+        except Exception:
+            continue
+    return {k: v for k, v in results.items() if v["mentions"] > 0}
 
 
 # ── News Sentiment (Alpaca News API) ─────────────────────────────────────────
@@ -91,13 +124,15 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
 
     # Top symbols from tracker for news fetch
     top_syms = [row[1] for row in tracker[1:21] if len(row) > 1]
-    news = fetch_news_sentiment(top_syms, hours_back)
+    news   = fetch_news_sentiment(top_syms, hours_back)
+    reddit = fetch_reddit_sentiment(top_syms)
 
     return {
         "alerts":  alerts[:50],
         "signals": signals[:30],
         "tracker": tracker[:20],
         "news":    news,
+        "reddit":  reddit,
         "period":  f"Last {hours_back} hours",
         "timestamp": datetime.now().strftime("%b %d %H:%M"),
     }
@@ -131,6 +166,14 @@ def format_data_for_ai(data: dict, mode: str) -> str:
             lines.append(f"{sym}: {bias} (+{s['positive']}/-{s['negative']})")
             for h in s["headlines"][:2]:
                 lines.append(f"  {h}")
+
+    # Reddit sentiment
+    reddit = data.get("reddit", {})
+    if reddit:
+        lines.append("\n--- REDDIT BUZZ (WSB/stocks/investing) ---")
+        for sym, s in sorted(reddit.items(), key=lambda x: x[1]["mentions"], reverse=True)[:10]:
+            mood = "🟢 bullish" if s["bullish"] > s["bearish"] else ("🔴 bearish" if s["bearish"] > s["bullish"] else "⚪ neutral")
+            lines.append(f"{sym}: {s['mentions']} mentions {mood}")
 
     return "\n".join(lines)
 

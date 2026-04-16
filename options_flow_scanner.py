@@ -194,9 +194,8 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
         iv_spike  = bool(iv_pct and iv_pct > IV_SPIKE_THRESH and cp == "C")
         sweep     = volume >= SWEEP_BLOCK_SIZE and cp == "C"
 
-        # Open interest not available in Alpaca chain — use volume as proxy
-        oi = int(volume)
-        # Vol/OI ratio only meaningful when we have real OI; skip for now
+        # OI not in Alpaca chain — populated from OI_SNAPSHOT (oi_tracker.py EOD)
+        oi = 0
         vol_oi_ratio = None
 
         # Mid-price rule: trade at/above mid = buyer aggressive (BUY), below = seller (SELL)
@@ -353,6 +352,12 @@ def confluence_score(sym: str, flow_direction: str, results: list, gamma_data: d
             score += 1; parts.append("news🟢")
         elif flow_direction == "PUT" and n["negative"] > n["positive"]:
             score += 1; parts.append("news🔴")
+        # Reddit buzz as bonus (same direction)
+        reddit = n.get("reddit", {})
+        if reddit and flow_direction == "CALL" and reddit.get("bullish", 0) > reddit.get("bearish", 0):
+            score += 1; parts.append("reddit🟢")
+        elif reddit and flow_direction == "PUT" and reddit.get("bearish", 0) > reddit.get("bullish", 0):
+            score += 1; parts.append("reddit🔴")
 
     # 3. GEX regime (negative GEX = trending = good for directional bets)
     if gamma_data and sym in gamma_data:
