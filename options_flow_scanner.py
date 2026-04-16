@@ -528,9 +528,9 @@ def format_report(results: list, earnings: dict = None,
 
 # ── Duplicate Suppression ─────────────────────────────────────────────────────
 _last_top_flows: set = set()
+_alerted_today: dict = {"date": "", "contracts": set()}
 
 def has_new_signals(results: list) -> bool:
-    """Returns True if top flows changed since last scan."""
     global _last_top_flows
     current = set()
     for r in results:
@@ -540,6 +540,21 @@ def has_new_signals(results: list) -> bool:
     changed = current != _last_top_flows
     _last_top_flows = current
     return changed
+
+
+def filter_new_golden_flow(gf: list) -> list:
+    """Only return Golden Flow contracts not yet alerted today."""
+    global _alerted_today
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _alerted_today["date"] != today:
+        _alerted_today = {"date": today, "contracts": set()}
+    new = []
+    for f in gf:
+        key = f"{f['_sym']}-{f['type']}-{f['strike']}-{f['expiry']}"
+        if key not in _alerted_today["contracts"]:
+            new.append(f)
+            _alerted_today["contracts"].add(key)
+    return new
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -619,8 +634,8 @@ def run_scan(force_send: bool = False):
     except Exception:
         pass
 
-    # ── Silent mode: only alert on Golden Flow or ⭐⭐⭐ confluence ──────────
-    gf = golden_flow(results)
+    # ── Silent mode: only alert on NEW Golden Flow or ⭐⭐⭐ confluence ──────────
+    gf = filter_new_golden_flow(golden_flow(results))  # deduped — once per contract per day
     high_conf = []
     for r in results:
         for entry in r["calls"] + r["puts"]:
