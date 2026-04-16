@@ -22,7 +22,7 @@ SUMMARY_HEADERS = ["last_updated", "symbol", "signal", "pc_ratio",
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
-                   "price_at_alert", "score", "buy_sell"]
+                   "price_at_alert", "score", "buy_sell", "oi", "vol_oi_ratio"]
 
 SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike"]
@@ -45,7 +45,7 @@ def dte_bucket(dte: int) -> str:
 
 
 def _creds():
-    key_file = os.path.expanduser("~/Desktop/down/yahoo-portfolio-data-44dbe4ae4313.json")
+    key_file = "/mnt/data_disk/yahoo-portfolio-data-492bd9f9aea4.json"
     raw = os.environ.get("GOOGLE_CREDENTIALS", "")
     if os.path.exists(key_file):
         return Credentials.from_service_account_file(key_file, scopes=SCOPES)
@@ -72,12 +72,23 @@ def _ensure_tabs(svc, sid: str, needed: list):
         ).execute()
 
     # Write headers to new tabs
+    SIGNAL_OUTCOMES_HEADERS = [
+        "alert_ts", "symbol", "type", "strike", "expiry", "score", "premium_k",
+        "price_at_alert", "price_1d", "price_3d",
+        "move_1d_pct", "move_3d_pct", "direction", "correct_1d", "correct_3d"
+    ]
     header_map = {
-        "SYMBOL_TRACKER":  SUMMARY_HEADERS,
-        "UNUSUAL_ALERTS":  ALERT_HEADERS,
-        "OI_SNAPSHOT":     OI_HEADERS,
+        "SYMBOL_TRACKER":   SUMMARY_HEADERS,
+        "UNUSUAL_ALERTS":   ALERT_HEADERS,
+        "OI_SNAPSHOT":      OI_HEADERS,
         "EARNINGS_TRACKER": EARNINGS_HEADERS,
-        "SIGNAL_HISTORY":  SIGNAL_HISTORY_HEADERS,
+        "SIGNAL_HISTORY":   SIGNAL_HISTORY_HEADERS,
+        "SIGNAL_OUTCOMES":  [
+            "alert_ts", "symbol", "type", "strike", "expiry", "score", "premium_k",
+            "price_at_alert", "price_1d", "price_3d",
+            "move_1d_pct", "move_3d_pct", "direction", "correct_1d", "correct_3d",
+            "oi_next_day", "oi_confirmed"
+        ],
     }
     for tab in needed:
         if tab in existing:
@@ -420,15 +431,10 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
         # Get previous scan BEFORE writing new data
         previous = get_last_scan(svc, sid)
 
-        # Ensure tabs — only for fixed symbols, not dynamic screener stocks
-        fixed_tabs = ["SYMBOL_TRACKER", "UNUSUAL_ALERTS", "OI_SNAPSHOT", "EARNINGS_TRACKER"]
-        fixed_syms = [r["symbol"] for r in results if fixed_symbols is None or r["symbol"] in fixed_symbols]
-        all_tabs = fixed_tabs + fixed_syms
-        _ensure_tabs(svc, sid, all_tabs)
+        _ensure_tabs(svc, sid, ["SYMBOL_TRACKER", "UNUSUAL_ALERTS", "OI_SNAPSHOT", "EARNINGS_TRACKER"])
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         tracker_rows, alert_rows = [], []
-        symbol_rows = {}   # tab_name → [rows]
 
         for r in results:
             sym = r["symbol"]
@@ -443,45 +449,30 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
                 r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,
             ])
 
-            # Per-symbol + UNUSUAL_ALERTS
-            sym_rows = []
+            # UNUSUAL_ALERTS — only high-conviction flows
             for entry in r["calls"] + r["puts"]:
-                bucket = dte_bucket(entry["dte"])
-                base = [
-                    now, entry["type"], entry["strike"], entry["expiry"], bucket,
-                    entry["volume"], entry["premium"] // 1000,
-                    entry["iv"] or "", entry["delta"] or "",
-                    "YES" if entry.get("sweep") else "",
-                    "YES" if entry.get("iv_spike") else "",
-                ]
-                sym_rows.append(base)
-
                 if entry["premium"] >= ALERT_THRESHOLD_K * 1000 or entry.get("sweep"):
-                    alert_rows.append([now, sym] + base[1:] + [
+                    bucket = dte_bucket(entry["dte"])
+                    alert_rows.append([
+                        now, sym, entry["type"], entry["strike"], entry["expiry"], bucket,
+                        entry["volume"], entry["premium"] // 1000,
+                        entry["iv"] or "", entry["delta"] or "",
+                        "YES" if entry.get("sweep") else "",
+                        "YES" if entry.get("iv_spike") else "",
                         sig,
                         prices.get(sym, "") if prices else "",
                         entry.get("score", ""),
                         entry.get("buy_sell", ""),
+                        entry.get("oi", ""),
+                        entry.get("vol_oi_ratio", ""),
                     ])
 
-            # Only store per-symbol tab for fixed watchlist (not dynamic screener stocks)
-            if sym in symbol_rows or True:  # always add to dict, filter at write time
-                symbol_rows[sym] = sym_rows
-
-        # Write everything
         _upsert_tracker(svc, sid, tracker_rows)
         _append(svc, sid, "UNUSUAL_ALERTS", alert_rows)
-        # Prepend symbol rows in 2 API calls total (newest at top)
-        fixed_sym_rows = {sym: rows for sym, rows in symbol_rows.items()
-                          if fixed_symbols is None or sym in fixed_symbols}
-        _prepend_batch(svc, sid, fixed_sym_rows)
+        print(f"  📊 Sheets: {len(alert_rows)} alerts | {len(tracker_rows)} tracker")
 
-        total_sym_rows = sum(len(v) for v in symbol_rows.values())
-        print(f"  📊 Sheets: {len(alert_rows)} alerts | {total_sym_rows} symbol rows | {len(tracker_rows)} tracker")
-
-        # OI snapshot (once per day is enough but harmless to run each scan)
-        store_oi_snapshot(svc, sid, results)
-        oi_alerts = get_oi_changes(svc, sid, results)
+        # OI snapshot handled by oi_tracker.py (EOD only)
+        oi_alerts = []
 
         # Detect and store signal events
         _ensure_tabs(svc, sid, ["SIGNAL_HISTORY"])

@@ -82,6 +82,11 @@ def score_alert(entry: dict) -> int:
     if entry.get("sweep"):    s += 2
     if entry.get("iv_spike"): s += 2
 
+    # Vol/OI ratio: >5x = fresh unusual positioning (not just rolling existing)
+    vol_oi = entry.get("vol_oi_ratio")
+    if vol_oi and vol_oi >= 10: s += 2   # 10x+ = extremely unusual
+    elif vol_oi and vol_oi >= 5: s += 1  # 5x+ = unusual
+
     dte = entry.get("dte", 99)
     if dte <= 7:    s += 2
     elif dte <= 30: s += 1
@@ -189,6 +194,11 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
         iv_spike  = bool(iv_pct and iv_pct > IV_SPIKE_THRESH and cp == "C")
         sweep     = volume >= SWEEP_BLOCK_SIZE and cp == "C"
 
+        # Open interest not available in Alpaca chain — use volume as proxy
+        oi = int(volume)
+        # Vol/OI ratio only meaningful when we have real OI; skip for now
+        vol_oi_ratio = None
+
         # Mid-price rule: trade at/above mid = buyer aggressive (BUY), below = seller (SELL)
         buy_sell = ""
         if snap.latest_trade and mid > 0:
@@ -201,7 +211,9 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
             "strike": strike, "expiry": expiry_fmt, "dte": dte,
             "volume": int(volume), "premium": int(premium),
             "delta": round(delta, 2) if delta else None,
+            "gamma": round(snap.greeks.gamma, 4) if snap.greeks and snap.greeks.gamma else None,
             "iv": iv_pct, "mid": round(mid, 2),
+            "oi": oi, "vol_oi_ratio": vol_oi_ratio,
             "sweep": sweep, "iv_spike": iv_spike, "buy_sell": buy_sell,
         }
         entry["score"] = score_alert(entry)
@@ -310,9 +322,54 @@ def send_telegram(text: str):
             print(f"Telegram error: {e}")
 
 
+# ── Confluence Score ──────────────────────────────────────────────────────────
+def confluence_score(sym: str, flow_direction: str, results: list, gamma_data: dict = None, news_data: dict = None) -> str:
+    """
+    Score alignment across 3 independent signals:
+      1. Options flow (P/C ratio direction)
+      2. News sentiment (positive/negative)
+      3. GEX regime (positive=pinned, negative=trending)
+
+    Returns a string like: "⭐⭐⭐ HIGH (flow🐂 + news🟢 + gex🔴)"
+    """
+    score = 0
+    parts = []
+
+    # 1. Flow signal
+    r = next((x for x in results if x["symbol"] == sym), None)
+    if r and r.get("pc_ratio"):
+        pc = r["pc_ratio"]
+        flow_bull = pc < 0.7
+        flow_bear = pc > 1.3
+        if flow_direction == "CALL" and flow_bull:
+            score += 1; parts.append("flow🐂")
+        elif flow_direction == "PUT" and flow_bear:
+            score += 1; parts.append("flow🐻")
+
+    # 2. News sentiment
+    if news_data and sym in news_data:
+        n = news_data[sym]
+        if flow_direction == "CALL" and n["positive"] > n["negative"]:
+            score += 1; parts.append("news🟢")
+        elif flow_direction == "PUT" and n["negative"] > n["positive"]:
+            score += 1; parts.append("news🔴")
+
+    # 3. GEX regime (negative GEX = trending = good for directional bets)
+    if gamma_data and sym in gamma_data:
+        gex = gamma_data[sym]
+        if gex < 0:  # negative GEX = MMs amplify moves = directional bets work better
+            score += 1; parts.append("gex🔴trending")
+
+    if score == 3:   return f"⭐⭐⭐ *HIGH* ({' + '.join(parts)})"
+    elif score == 2: return f"⭐⭐ Medium ({' + '.join(parts)})"
+    elif score == 1: return f"⭐ Low ({' + '.join(parts)})"
+    return ""
+
+
 # ── Formatter ─────────────────────────────────────────────────────────────────
 def format_report(results: list, earnings: dict = None,
-                  vix: float = None, momentum: list = None) -> str:
+                  vix: float = None, momentum: list = None,
+                  gamma_data: dict = None, news_data: dict = None) -> str:
     now = datetime.now().strftime("%b %d %H:%M")
     lines = [f"*📊 Options Flow — {now}*", ""]
 
@@ -347,9 +404,11 @@ def format_report(results: list, earnings: dict = None,
         lines.append("*⭐ Golden Flow* _(sweep + score≥8 + $1M+)_")
         for f in gf[:5]:
             side = "🐂 CALL" if f["type"] == "CALL" else "🐻 PUT"
+            conf = confluence_score(f["_sym"], f["type"], results, gamma_data, news_data)
+            conf_str = f"\n  └ {conf}" if conf else ""
             lines.append(
                 f"{side} *{f['_sym']}* ${f['strike']:.0f} {f['expiry']}"
-                f"  ⭐{f['score']}  💰 *${f['premium']//1000}K* 🚨"
+                f"  ⭐{f['score']}  💰 *${f['premium']//1000}K* 🚨{conf_str}"
             )
         lines.append("")
 
@@ -496,7 +555,27 @@ def run_scan(force_send: bool = False):
         print("⏭️  No new high-score signals — skipping Telegram.")
         return
 
-    report = format_report(results, earnings, vix, momentum)
+    # Fetch gamma levels (latest from sheet) and news for confluence scoring
+    gamma_data, news_data = {}, {}
+    try:
+        from sheets import _service, SHEET_ID
+        svc = _service()
+        # Latest GEX per symbol (nearest expiry)
+        gr = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="GAMMA_LEVELS!A:L").execute()
+        for row in gr.get("values", [])[1:]:
+            if len(row) >= 11 and row[1] not in gamma_data:
+                try: gamma_data[row[1]] = float(row[10])  # gex column
+                except: pass
+    except Exception:
+        pass
+    try:
+        from daily_brief import fetch_news_sentiment
+        top_syms = [r["symbol"] for r in results[:20]]
+        news_data = fetch_news_sentiment(top_syms, hours_back=4)
+    except Exception:
+        pass
+
+    report = format_report(results, earnings, vix, momentum, gamma_data, news_data)
     send_telegram(report)
     print(f"✅ Sent. VIX={vix}")
 

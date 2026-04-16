@@ -107,3 +107,37 @@ jobs:
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_OPTIONS_SHEET_ID: ${{ secrets.GOOGLE_OPTIONS_SHEET_ID }}
+
+  gamma-levels:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.job == 'eod'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python gamma_levels.py
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_OPTIONS_SHEET_ID: ${{ secrets.GOOGLE_OPTIONS_SHEET_ID }}
+
+  signal-outcomes:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.job == 'eod'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python signal_outcomes.py
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_OPTIONS_SHEET_ID: ${{ secrets.GOOGLE_OPTIONS_SHEET_ID }}

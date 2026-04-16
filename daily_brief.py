@@ -17,9 +17,50 @@ from sheets import _service, SHEET_ID
 from notifier import send
 
 # ── Credentials ───────────────────────────────────────────────────────────────
-def _gemini_key():  return os.environ.get("GOOGLE_AI_API", os.environ.get("google_ai_api", ""))
-def _gemini_key2(): return os.environ.get("GOOGLE_AI_API_2", "")  # Melveetil account fallback
-def _groq_key():    return os.environ.get("GROQ_API_KEY", "")
+def _alpaca_key():    return os.environ.get("ALPACA_API_KEY", "")
+def _alpaca_secret(): return os.environ.get("ALPACA_SECRET_KEY", "")
+
+
+# ── News Sentiment (Alpaca News API) ─────────────────────────────────────────
+def fetch_news_sentiment(symbols: list, hours_back: int = 18) -> dict:
+    """
+    Fetch recent news from Alpaca and score sentiment per symbol.
+    Returns {symbol: {"positive": n, "negative": n, "neutral": n, "headlines": [...]}}
+    """
+    if not _alpaca_key():
+        return {}
+    try:
+        from datetime import timezone
+        start = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        r = requests.get(
+            "https://data.alpaca.markets/v1beta1/news",
+            headers={"APCA-API-KEY-ID": _alpaca_key(), "APCA-API-SECRET-KEY": _alpaca_secret()},
+            params={"symbols": ",".join(symbols[:20]), "start": start, "limit": 50, "sort": "desc"},
+            timeout=10
+        )
+        if not r.ok:
+            return {}
+        news = r.json().get("news", [])
+        result = {}
+        for article in news:
+            headline = article.get("headline", "")
+            syms = article.get("symbols", [])
+            # Simple keyword sentiment (no FinBERT needed — fast and free)
+            text = headline.lower()
+            pos_words = ["surge", "rally", "beat", "strong", "gain", "rise", "bullish", "upgrade", "buy", "record", "growth"]
+            neg_words = ["drop", "fall", "miss", "weak", "loss", "decline", "bearish", "downgrade", "sell", "cut", "layoff", "crash"]
+            score = sum(1 for w in pos_words if w in text) - sum(1 for w in neg_words if w in text)
+            label = "positive" if score > 0 else ("negative" if score < 0 else "neutral")
+            for sym in syms:
+                if sym not in result:
+                    result[sym] = {"positive": 0, "negative": 0, "neutral": 0, "headlines": []}
+                result[sym][label] += 1
+                if len(result[sym]["headlines"]) < 3:
+                    result[sym]["headlines"].append(f"{'🟢' if label=='positive' else '🔴' if label=='negative' else '⚪'} {headline[:80]}")
+        return result
+    except Exception as e:
+        print(f"  News fetch error: {e}")
+        return {}
 
 
 # ── Data Fetcher ──────────────────────────────────────────────────────────────
@@ -48,10 +89,15 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
     ).execute()
     tracker = r3.get("values", [])
 
+    # Top symbols from tracker for news fetch
+    top_syms = [row[1] for row in tracker[1:21] if len(row) > 1]
+    news = fetch_news_sentiment(top_syms, hours_back)
+
     return {
-        "alerts":  alerts[:50],   # cap to avoid token limits
+        "alerts":  alerts[:50],
         "signals": signals[:30],
-        "tracker": tracker[:20],  # top 20 symbols
+        "tracker": tracker[:20],
+        "news":    news,
         "period":  f"Last {hours_back} hours",
         "timestamp": datetime.now().strftime("%b %d %H:%M"),
     }
@@ -75,6 +121,16 @@ def format_data_for_ai(data: dict, mode: str) -> str:
     for row in data["signals"]:
         if len(row) >= 4:
             lines.append(f"{row[0]} | {row[1]} | {row[2]} | {row[3]}")
+
+    # News sentiment
+    news = data.get("news", {})
+    if news:
+        lines.append("\n--- NEWS SENTIMENT (last period) ---")
+        for sym, s in list(news.items())[:15]:
+            bias = "🟢 bullish" if s["positive"] > s["negative"] else ("🔴 bearish" if s["negative"] > s["positive"] else "⚪ neutral")
+            lines.append(f"{sym}: {bias} (+{s['positive']}/-{s['negative']})")
+            for h in s["headlines"][:2]:
+                lines.append(f"  {h}")
 
     return "\n".join(lines)
 
