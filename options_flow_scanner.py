@@ -580,9 +580,48 @@ def run_scan(force_send: bool = False):
     except Exception:
         pass
 
-    report = format_report(results, earnings, vix, momentum, gamma_data, news_data)
-    send_telegram(report)
-    print(f"✅ Sent. VIX={vix}")
+    # ── Silent mode: only alert on Golden Flow or ⭐⭐⭐ confluence ──────────
+    gf = golden_flow(results)
+    high_conf = []
+    for r in results:
+        for entry in r["calls"] + r["puts"]:
+            if entry.get("score", 0) >= 8:
+                conf = confluence_score(entry["symbol"], entry["type"], results, gamma_data, news_data)
+                if "HIGH" in conf:
+                    entry["_sym"] = entry["symbol"]
+                    high_conf.append((entry, conf))
+
+    if not force_send and not gf and not high_conf:
+        print("🔇 Silent — no Golden Flow or HIGH confluence. Data saved to sheets.")
+        return
+
+    # Build focused alert (not the full report)
+    now = datetime.now().strftime("%b %d %H:%M")
+    lines = [f"*🚨 High Conviction Alert — {now}*", ""]
+
+    if gf:
+        lines.append("*⭐ Golden Flow*")
+        for f in gf[:3]:
+            side = "🐂 CALL" if f["type"] == "CALL" else "🐻 PUT"
+            conf = confluence_score(f["_sym"], f["type"], results, gamma_data, news_data)
+            lines.append(f"{side} *{f['_sym']}* ${f['strike']:.0f} {f['expiry']}  ⭐{f['score']}  💰 ${f['premium']//1000}K")
+            if conf: lines.append(f"  └ {conf}")
+
+    if high_conf:
+        lines.append("\n*⭐⭐⭐ High Confluence*")
+        for entry, conf in high_conf[:3]:
+            side = "🐂 CALL" if entry["type"] == "CALL" else "🐻 PUT"
+            lines.append(f"{side} *{entry['_sym']}* ${entry['strike']:.0f} {entry['expiry']}  ⭐{entry['score']}  💰 ${entry['premium']//1000}K")
+            lines.append(f"  └ {conf}")
+
+    # Add market context
+    spy = next((r for r in results if r["symbol"] == "SPY"), None)
+    if spy:
+        lines.append(f"\nSPY P/C `{spy['pc_ratio']}` | VIX `{vix}`")
+
+    lines.append("\n_Not financial advice_")
+    send_telegram("\n".join(lines))
+    print(f"✅ Alert sent — {len(gf)} golden flow, {len(high_conf)} high confluence. VIX={vix}")
 
 
 if __name__ == "__main__":
