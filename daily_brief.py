@@ -149,9 +149,55 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
     tracker = r3.get("values", [])
 
     # Top symbols from tracker for news fetch
+    # Historical context — last 3 days of outcomes + persistent signals
+    history_ctx = []
+    try:
+        # SIGNAL_OUTCOMES — what fired recently and was it right?
+        ro = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="SIGNAL_OUTCOMES!A:O").execute()
+        outcome_rows = ro.get("values", [])[1:]
+        from datetime import date as _date, timedelta as _td
+        three_days_ago = (datetime.now() - _td(days=3)).strftime("%Y-%m-%d")
+        for row in outcome_rows:
+            if len(row) >= 14 and row[0][:10] >= three_days_ago:
+                result = row[13] if row[13] else "pending"
+                move = f"{row[10]}%" if row[10] else "?"
+                history_ctx.append(
+                    f"{row[0][:10]} | {row[1]} {row[2]} ${row[3]} {row[4]} | "
+                    f"score={row[5]} | 1d move={move} | {result}"
+                )
+
+        # SIGNAL_HISTORY — persistent sweeps (same contract 3+ days)
+        rh = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="SIGNAL_HISTORY!A:F").execute()
+        sig_rows = rh.get("values", [])[1:]
+        from collections import Counter
+        contract_count = Counter()
+        for row in sig_rows:
+            if len(row) >= 4 and row[0][:10] >= three_days_ago:
+                contract_count[f"{row[2]}|{row[3]}"] += 1
+        for key, count in contract_count.most_common(5):
+            if count >= 3:
+                sym, detail = key.split("|", 1)
+                history_ctx.append(f"PERSISTENT ({count}x): {sym} {detail}")
+    except Exception:
+        pass
+
     top_syms = [row[1] for row in tracker[1:21] if len(row) > 1]
     news   = fetch_news_sentiment(top_syms, hours_back)
     reddit = fetch_reddit_sentiment(top_syms)
+
+    # Gamma levels — nearest expiry per symbol
+    gamma = {}
+    try:
+        rg = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="GAMMA_LEVELS!A:L").execute()
+        for row in rg.get("values", [])[1:]:
+            if len(row) >= 12 and row[1] not in gamma:
+                gamma[row[1]] = {
+                    "spot": row[3], "max_pain": row[4],
+                    "call_wall": row[5], "put_wall": row[6],
+                    "gex": row[10], "gex_regime": row[11]
+                }
+    except Exception:
+        pass
 
     return {
         "alerts":  alerts[:50],
@@ -159,6 +205,8 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
         "tracker": tracker[:20],
         "news":    news,
         "reddit":  reddit,
+        "gamma":   gamma,
+        "history": history_ctx,
         "period":  f"Last {hours_back} hours",
         "timestamp": datetime.now().strftime("%b %d %H:%M"),
     }
@@ -169,36 +217,63 @@ def format_data_for_ai(data: dict, mode: str) -> str:
     lines = [f"=== OPTIONS FLOW DATA ({data['period']}) ===\n"]
 
     lines.append("--- SYMBOL TRACKER (current P/C ratios) ---")
-    for row in data["tracker"][1:]:  # skip header
+    for row in data["tracker"][1:]:
         if len(row) >= 4:
             lines.append(f"{row[1]}: signal={row[2]} P/C={row[3]} calls={row[4] if len(row)>4 else '?'} puts={row[5] if len(row)>5 else '?'}")
 
-    lines.append("\n--- UNUSUAL ALERTS (top flows) ---")
+    # Historical context
+    history = data.get("history", [])
+    if history:
+        lines.append("\n--- HISTORICAL CONTEXT (last 3 days — what fired and was it right?) ---")
+        for h in history[:15]:
+            lines.append(h)
+
+    lines.append("\n--- UNUSUAL ALERTS (top flows, score≥7) ---")
+    # ALERT_HEADERS: timestamp(0) symbol(1) type(2) strike(3) expiry(4) dte_bucket(5)
+    #   volume(6) premium_k(7) iv(8) delta(9) sweep(10) iv_spike(11) signal(12)
+    #   price_at_alert(13) score(14) buy_sell(15) oi(16) vol_oi_ratio(17)
     for row in data["alerts"][:20]:
         if len(row) >= 8:
-            lines.append(f"{row[0]} | {row[1]} {row[2]} ${row[3]} {row[4]} | vol={row[6]} premium=${row[7]}K | sweep={row[10] if len(row)>10 else ''} score={row[13] if len(row)>13 else ''}")
+            score = row[14] if len(row) > 14 else ""
+            sweep = "SWEEP" if len(row) > 10 and row[10] == "YES" else ""
+            buy_sell = row[15] if len(row) > 15 else ""
+            lines.append(
+                f"{row[0]} | {row[1]} {row[2]} ${row[3]} {row[4]} | "
+                f"vol={row[6]} premium=${row[7]}K | score={score} {sweep} {buy_sell}"
+            )
 
-    lines.append("\n--- SIGNAL HISTORY (key events) ---")
+    lines.append("\n--- SIGNAL HISTORY (sweeps, flips, persistence) ---")
     for row in data["signals"]:
         if len(row) >= 4:
             lines.append(f"{row[0]} | {row[1]} | {row[2]} | {row[3]}")
 
+    # Gamma levels
+    gamma = data.get("gamma", {})
+    if gamma:
+        lines.append("\n--- GAMMA LEVELS (max pain / call wall / put wall / GEX) ---")
+        for sym, g in list(gamma.items())[:6]:
+            lines.append(
+                f"{sym}: spot={g['spot']} max_pain={g['max_pain']} "
+                f"call_wall={g['call_wall']} put_wall={g['put_wall']} "
+                f"GEX={g['gex']}M ({g['gex_regime']})"
+            )
+
     # News sentiment
     news = data.get("news", {})
     if news:
-        lines.append("\n--- NEWS SENTIMENT (last period) ---")
-        for sym, s in list(news.items())[:15]:
+        lines.append("\n--- NEWS SENTIMENT (FinBERT scored) ---")
+        for sym, s in list(news.items())[:12]:
             bias = "🟢 bullish" if s["positive"] > s["negative"] else ("🔴 bearish" if s["negative"] > s["positive"] else "⚪ neutral")
             lines.append(f"{sym}: {bias} (+{s['positive']}/-{s['negative']})")
-            for h in s["headlines"][:2]:
+            for h in s["headlines"][:1]:
                 lines.append(f"  {h}")
 
-    # Reddit sentiment
+    # Reddit
     reddit = data.get("reddit", {})
     if reddit:
-        lines.append("\n--- REDDIT BUZZ (WSB/stocks/investing) ---")
-        for sym, s in sorted(reddit.items(), key=lambda x: x[1]["mentions"], reverse=True)[:10]:
-            mood = "🟢 bullish" if s["bullish"] > s["bearish"] else ("🔴 bearish" if s["bearish"] > s["bullish"] else "⚪ neutral")
+        lines.append("\n--- REDDIT BUZZ ---")
+        for sym, s in sorted(reddit.items(), key=lambda x: x[1]["mentions"], reverse=True)[:8]:
+            mood = "🟢" if s["bullish"] > s["bearish"] else ("🔴" if s["bearish"] > s["bullish"] else "⚪")
             lines.append(f"{sym}: {s['mentions']} mentions {mood}")
 
     return "\n".join(lines)
@@ -242,32 +317,31 @@ def _call_groq_model(prompt: str, model: str) -> str:
 
 # Priority chains — different order per role so no single service gets all 3 calls
 ANALYST_1_CHAIN = ["gemini", "groq-70b", "openrouter"]   # Gemini first (best quality)
-ANALYST_1_CHAIN = ["gemini", "groq-70b", "openrouter"]   # Gemini first (best quality)
 ANALYST_2_CHAIN = ["groq-70b", "openrouter", "gemini"]   # Groq first (fastest)
 VERIFIER_CHAIN  = ["openrouter", "groq-8b", "gemini"]    # OpenRouter first (3rd provider)
 
-ANALYST_PROMPT = """You are an institutional options flow analyst. Analyze ONLY the data provided.
-Do NOT add information not in the data. If data is insufficient, say so explicitly.
-Cite specific $ amounts and symbols from the data.
+ANALYST_PROMPT = """You are an institutional options flow analyst with memory of recent signals. Analyze ONLY the data provided.
 
 {mode_instruction}
 
 DATA:
 {data}
 
-Write your analysis in under 180 words. Be specific. Cite data. No vague statements."""
+Rules: Under 200 words. Cite exact $ amounts. Reference historical outcomes when relevant. Be direct — no hedging."""
 
-MORNING_INSTRUCTION = """Write a MORNING BRIEF covering:
-1. Top 3 smart money signals from the data (cite exact $ amounts)
-2. What expires soon (potential volatility catalysts)
-3. Overall market bias with evidence
-4. One specific setup to watch today"""
+MORNING_INSTRUCTION = """MORNING BRIEF — use the HISTORICAL CONTEXT to tell the story, then today's data:
+1. STORY SO FAR: What positions have been building over multiple days? Are previous signals playing out or failing?
+2. TODAY'S BIGGEST SIGNAL: Single largest flow with direction and conviction level
+3. MARKET BIAS: Net bullish or bearish? (cite P/C ratios + whether persistent signals confirm)
+4. HIGHEST PROBABILITY SETUP: One specific trade idea — symbol, direction, why (flow + news + GEX alignment)
+Be direct. "ARKK calls swept 9x over 2 days = institutional conviction, expires tomorrow" not "ARKK may be worth watching"."""
 
-EVENING_INSTRUCTION = """Write an EVENING DIGEST covering:
-1. What the smart money did today (top signals)
-2. Any signal flips or momentum changes
-3. What to watch tomorrow
-4. Overall assessment: was today bullish or bearish for smart money?"""
+EVENING_INSTRUCTION = """EVENING DIGEST — use HISTORICAL CONTEXT to assess what happened:
+1. WHAT PLAYED OUT: Did today's signals confirm or reverse previous positions? (cite outcomes)
+2. POSITION CHANGES: Any new large positions opened? Any old ones closing (OI decreasing)?
+3. WHAT'S BEING BUILT: Contracts appearing 3+ times = someone accumulating — name them
+4. TOMORROW'S SETUP: Based on persistent signals + today's flow, what is the highest-conviction play?
+Be direct. Reference specific $ amounts and whether signals were right or wrong."""
 
 def call_hf(prompt: str) -> str:
     """Verifier - uses OpenRouter free models (3rd provider).
