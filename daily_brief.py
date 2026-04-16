@@ -518,7 +518,7 @@ def run_brief(mode: str = "morning"):
     # Verifier consolidates using 3rd-priority chain
     print("  Calling verifier...")
     verifier_prompt = VERIFIER_PROMPT.format(
-        analysis_a=analysis_a, analysis_b=analysis_b, data=data_str[:2000]
+        analysis_a=analysis_a, analysis_b=analysis_b, data=data_str[:4000]
     )
     consolidated, model_v = call_with_fallback(verifier_prompt, VERIFIER_CHAIN)
     print(f"  Models used: A1={model_a} A2={model_b} V={model_v}")
