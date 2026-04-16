@@ -354,7 +354,7 @@ def _call_groq_model(prompt: str, model: str) -> str:
 # Priority chains — different order per role so no single service gets all 3 calls
 ANALYST_1_CHAIN = ["gemini", "groq-70b", "openrouter"]   # Gemini first (best quality)
 ANALYST_2_CHAIN = ["groq-70b", "openrouter", "gemini"]   # Groq first (fastest)
-VERIFIER_CHAIN  = ["openrouter", "groq-8b", "gemini"]    # OpenRouter first (3rd provider)
+VERIFIER_CHAIN  = ["gemini", "groq-70b", "openrouter"]   # Gemini first (most decisive)
 
 ANALYST_PROMPT = """You are an institutional options flow analyst. Analyze ONLY the data provided. Think step by step before concluding.
 
