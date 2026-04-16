@@ -20,8 +20,40 @@ from notifier import send
 def _gemini_key():    return os.environ.get("GOOGLE_AI_API", os.environ.get("google_ai_api", ""))
 def _gemini_key2():   return os.environ.get("GOOGLE_AI_API_2", "")
 def _groq_key():      return os.environ.get("GROQ_API_KEY", "")
+def _hf_key():        return os.environ.get("HF_TOKEN", "")
 def _alpaca_key():    return os.environ.get("ALPACA_API_KEY", "")
 def _alpaca_secret(): return os.environ.get("ALPACA_SECRET_KEY", "")
+
+
+# ── FinBERT Sentiment ─────────────────────────────────────────────────────────
+def _finbert_score(text: str) -> tuple[str, float]:
+    """
+    Score a headline using FinBERT via HuggingFace Inference API.
+    Falls back to keyword matching if no HF_TOKEN.
+    Returns (label, confidence): label = 'positive' | 'negative' | 'neutral'
+    """
+    hf = _hf_key()
+    if hf:
+        try:
+            r = requests.post(
+                "https://router.huggingface.co/hf-inference/models/ProsusAI/finbert",
+                headers={"Authorization": f"Bearer {hf}"},
+                json={"inputs": text[:200]},
+                timeout=10,
+            )
+            result = r.json()
+            if isinstance(result, list) and result:
+                top = max(result[0], key=lambda x: x["score"])
+                return top["label"], top["score"]
+        except Exception:
+            pass
+    # Keyword fallback
+    t = text.lower()
+    pos = sum(1 for w in ["surge","rally","beat","strong","gain","rise","bullish","upgrade","record"] if w in t)
+    neg = sum(1 for w in ["drop","fall","miss","weak","loss","decline","bearish","downgrade","crash","cut"] if w in t)
+    if pos > neg:   return "positive", 0.6
+    if neg > pos:   return "negative", 0.6
+    return "neutral", 0.5
 
 
 # ── Reddit Sentiment (free, no API key) ───────────────────────────────────────
@@ -57,7 +89,7 @@ def fetch_reddit_sentiment(symbols: list) -> dict:
 # ── News Sentiment (Alpaca News API) ─────────────────────────────────────────
 def fetch_news_sentiment(symbols: list, hours_back: int = 18) -> dict:
     """
-    Fetch recent news from Alpaca and score sentiment per symbol.
+    Fetch news from Alpaca and score with FinBERT (falls back to keywords if no HF_TOKEN).
     Returns {symbol: {"positive": n, "negative": n, "neutral": n, "headlines": [...]}}
     """
     if not _alpaca_key():
@@ -73,23 +105,17 @@ def fetch_news_sentiment(symbols: list, hours_back: int = 18) -> dict:
         )
         if not r.ok:
             return {}
-        news = r.json().get("news", [])
         result = {}
-        for article in news:
+        for article in r.json().get("news", []):
             headline = article.get("headline", "")
-            syms = article.get("symbols", [])
-            # Simple keyword sentiment (no FinBERT needed — fast and free)
-            text = headline.lower()
-            pos_words = ["surge", "rally", "beat", "strong", "gain", "rise", "bullish", "upgrade", "buy", "record", "growth"]
-            neg_words = ["drop", "fall", "miss", "weak", "loss", "decline", "bearish", "downgrade", "sell", "cut", "layoff", "crash"]
-            score = sum(1 for w in pos_words if w in text) - sum(1 for w in neg_words if w in text)
-            label = "positive" if score > 0 else ("negative" if score < 0 else "neutral")
-            for sym in syms:
+            label, _ = _finbert_score(headline)
+            for sym in article.get("symbols", []):
                 if sym not in result:
                     result[sym] = {"positive": 0, "negative": 0, "neutral": 0, "headlines": []}
                 result[sym][label] += 1
                 if len(result[sym]["headlines"]) < 3:
-                    result[sym]["headlines"].append(f"{'🟢' if label=='positive' else '🔴' if label=='negative' else '⚪'} {headline[:80]}")
+                    emoji = "🟢" if label == "positive" else ("🔴" if label == "negative" else "⚪")
+                    result[sym]["headlines"].append(f"{emoji} {headline[:80]}")
         return result
     except Exception as e:
         print(f"  News fetch error: {e}")
