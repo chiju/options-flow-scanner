@@ -645,7 +645,7 @@ def run_scan(force_send: bool = False):
                     entry["_sym"] = entry["symbol"]
                     high_conf.append((entry, conf))
 
-    if not force_send and not gf and not high_conf:
+    if not gf and not high_conf:
         print("🔇 Silent — no Golden Flow or HIGH confluence. Data saved to sheets.")
         return
 
