@@ -465,14 +465,18 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
             # Price context
             price = prices.get(sym, "") if prices else ""
 
-            # Interpretation = P/C + price direction together
+            # Interpretation = P/C + net premium together (no price needed)
             interp = ""
-            if pc and price:
-                # We don't have prev price here, use net premium as proxy
-                if pc > 1.3 and net_k > 0:   interp = "🛡️ Hedging"      # puts high but calls dominate $
-                elif pc > 1.3 and net_k < 0:  interp = "😨 Fear"         # puts high and put $ dominates
-                elif pc < 0.7 and net_k > 0:  interp = "🔥 Greed"        # calls dominate both ways
-                elif pc < 0.7 and net_k < 0:  interp = "⚠️ Complacency"  # calls by count, puts by $
+            if pc:
+                if pc > 1.3 and net_k > 0:    interp = "🛡️ Hedging"       # puts by count, calls by $
+                elif pc > 1.3 and net_k < 0:   interp = "😨 Fear"          # puts dominate both ways
+                elif pc > 1.3:                  interp = "😨 Fear"          # puts dominate, net unclear
+                elif pc < 0.7 and net_k > 0:   interp = "🔥 Greed"         # calls dominate both ways
+                elif pc < 0.7 and net_k < 0:   interp = "⚠️ Complacency"   # calls by count, puts by $
+                elif pc < 0.7:                  interp = "🔥 Greed"
+                elif net_k > 5000:              interp = "🟢 Call bias"     # neutral P/C but call $ dominates
+                elif net_k < -5000:             interp = "🔴 Put bias"      # neutral P/C but put $ dominates
+                else:                           interp = "⚪ Neutral"
 
             # SYMBOL_TRACKER
             tracker_rows.append([
