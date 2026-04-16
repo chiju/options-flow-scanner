@@ -247,7 +247,7 @@ def format_data_for_ai(data: dict, mode: str) -> str:
     price_trend = data.get("price_trend", {})
     if price_trend:
         lines.append("--- PRICE TREND (actual market movement) ---")
-        lines.append("IMPORTANT: High put volume during a rally = hedging, NOT bearish signal")
+        lines.append("RULE: If a symbol is UP and has high put volume → puts are HEDGES on longs (not bearish bets). Apply per symbol, not just market-wide.")
         for sym, trend in price_trend.items():
             lines.append(f"{sym}: {trend}")
         lines.append("")
