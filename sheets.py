@@ -32,7 +32,7 @@ SYMBOL_NAMES = {
 
 ALERT_THRESHOLD_K = 5000   # $5M+ or sweep → UNUSUAL_ALERTS
 
-SUMMARY_HEADERS = ["last_updated", "symbol", "name", "signal", "pc_ratio",
+SUMMARY_HEADERS = ["last_updated", "symbol", "name", "pc_ratio",
                    "call_vol", "put_vol", "top_call_k", "top_put_k",
                    "price", "price_chg_1d_pct", "net_premium_k", "interpretation"]
 
@@ -476,7 +476,7 @@ def store_results(results: list, prices: dict = None, fixed_symbols: set = None)
 
             # SYMBOL_TRACKER
             tracker_rows.append([
-                now, sym, SYMBOL_NAMES.get(sym, sym), sig, pc or "",
+                now, sym, SYMBOL_NAMES.get(sym, sym), pc or "",
                 r["call_vol"], r["put_vol"],
                 r["calls"][0]["premium"] // 1000 if r["calls"] else 0,
                 r["puts"][0]["premium"]  // 1000 if r["puts"]  else 0,
