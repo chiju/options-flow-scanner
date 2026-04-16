@@ -454,6 +454,30 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
 
         for r in results:
             sym = r["symbol"]
+            # Only track fixed watchlist symbols in SYMBOL_TRACKER — skip dynamic screener stocks
+            if fixed_symbols and sym not in fixed_symbols:
+                # Still write to UNUSUAL_ALERTS if they have high-conviction flow
+                pc  = r["pc_ratio"]
+                sig = _signal(pc)
+                call_k = sum(e["premium"] for e in r["calls"]) // 1000
+                put_k  = sum(e["premium"] for e in r["puts"])  // 1000
+                for entry in r["calls"] + r["puts"]:
+                    if entry["premium"] >= ALERT_THRESHOLD_K * 1000 or entry.get("sweep"):
+                        bucket = dte_bucket(entry["dte"])
+                        price     = prices.get(sym, "") if prices else ""
+                        price_chg = price_changes.get(sym, "") if price_changes else ""
+                        price_chg_display = price_changes.get(f"{sym}_display", price_chg) if price_changes else ""
+                        alert_rows.append([
+                            now, sym, entry["type"], entry["strike"], entry["expiry"], bucket,
+                            entry["volume"], entry["premium"] // 1000,
+                            entry["iv"] or "", entry["delta"] or "",
+                            "YES" if entry.get("sweep") else "",
+                            "YES" if entry.get("iv_spike") else "",
+                            sig, price, entry.get("score", ""), entry.get("buy_sell", ""),
+                            entry.get("oi", ""), entry.get("vol_oi_ratio", ""),
+                        ])
+                continue
+
             pc  = r["pc_ratio"]
             sig = _signal(pc)
 
