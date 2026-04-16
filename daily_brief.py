@@ -377,7 +377,7 @@ Answer these 4 questions:
 2. REAL SIGNALS: Which flows are directional (against trend) vs hedges (with trend)?
 3. PERSISTENCE: What's being built over multiple days? (from HISTORICAL CONTEXT)
 4. HIGHEST PROBABILITY SETUP: One specific trade — symbol, direction, why it's not just a hedge
-Be direct. "SPY is up 2% this week, so IWM puts are likely hedges. The real signal is ARKK calls swept 9x while market rallies = conviction bet."""
+Be direct. Example: "Market is up 2% this week, so index puts are likely hedges. The real signal is [SYMBOL] calls swept Nx while market rallies = conviction bet." Apply this logic to the actual data."""
 
 EVENING_INSTRUCTION = """EVENING DIGEST — use HISTORICAL CONTEXT to assess what happened:
 1. WHAT PLAYED OUT: Did today's signals confirm or reverse previous positions? (cite outcomes)
