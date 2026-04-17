@@ -144,6 +144,7 @@ def run_oi_tracker(symbols: list):
         return
 
     all_rows = []
+    MIN_OI_CHANGE_PCT = 10  # only store if OI changed by >10% or is new
 
     for sym in symbols:
         print(f"  {sym}...", end=" ", flush=True)
@@ -152,7 +153,14 @@ def run_oi_tracker(symbols: list):
             key = (c["symbol"], c["expiry"], c["strike"], c["type"])
             prev = prev_oi.get(key, 0)
             oi_change = c["oi"] - prev
-            # Price change: approximate from OI signal (we don't have yesterday's price here)
+
+            # Skip if OI didn't change significantly
+            if prev > 0:
+                change_pct = abs(oi_change) / prev * 100
+                if change_pct < MIN_OI_CHANGE_PCT:
+                    continue  # not significant
+            elif c["oi"] == 0:
+                continue  # no OI at all, skip
             # Use oi_change direction as proxy
             price_change = 1 if oi_change > 0 else -1  # simplified
             sig = _signal(oi_change, price_change) if prev > 0 else "⚪ New"
