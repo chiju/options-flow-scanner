@@ -752,14 +752,16 @@ def run_scan(force_send: bool = False):
         for f in gf[:3]:
             side = "🐂 CALL" if f["type"] == "CALL" else "🐻 PUT"
             conf = confluence_score(f["_sym"], f["type"], results, gamma_data, news_data)
-            lines.append(f"{side} *{f['_sym']}* ${f['strike']:.0f} {f['expiry']}  ⭐{f['score']}  💰 ${f['premium']//1000}K")
+            own = "  💼 *YOU OWN THIS*" if f["_sym"] in PORTFOLIO else ""
+            lines.append(f"{side} *{f['_sym']}* ${f['strike']:.0f} {f['expiry']}  ⭐{f['score']}  💰 ${f['premium']//1000}K{own}")
             if conf: lines.append(f"  └ {conf}")
 
     if high_conf:
         lines.append("\n*⭐⭐⭐ High Confluence*")
         for entry, conf in high_conf[:3]:
             side = "🐂 CALL" if entry["type"] == "CALL" else "🐻 PUT"
-            lines.append(f"{side} *{entry['_sym']}* ${entry['strike']:.0f} {entry['expiry']}  ⭐{entry['score']}  💰 ${entry['premium']//1000}K")
+            own = "  💼 *YOU OWN THIS*" if entry["_sym"] in PORTFOLIO else ""
+            lines.append(f"{side} *{entry['_sym']}* ${entry['strike']:.0f} {entry['expiry']}  ⭐{entry['score']}  💰 ${entry['premium']//1000}K{own}")
             lines.append(f"  └ {conf}")
 
     # Add market context
