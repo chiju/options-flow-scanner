@@ -146,6 +146,17 @@ def run_oi_tracker(symbols: list):
     all_rows = []
     MIN_OI_CHANGE_PCT = 10  # only store if OI changed by >10% or is new
 
+    # Get yesterday's prices per symbol for accurate signal calculation
+    prev_prices = {}
+    r_prev = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="OI_SNAPSHOT!A:I").execute()
+    prev_rows = r_prev.get("values", [])[1:]
+    if prev_rows:
+        last_date = sorted(set(r[0] for r in prev_rows if r), reverse=True)[0]
+        for row in prev_rows:
+            if len(row) >= 9 and row[0] == last_date and row[1] not in prev_prices:
+                try: prev_prices[row[1]] = float(row[8])
+                except: pass
+
     for sym in symbols:
         print(f"  {sym}...", end=" ", flush=True)
         contracts = fetch_oi(sym)
@@ -161,8 +172,10 @@ def run_oi_tracker(symbols: list):
                     continue  # not significant
             elif c["oi"] == 0:
                 continue  # no OI at all, skip
-            # Use oi_change direction as proxy
-            price_change = 1 if oi_change > 0 else -1  # simplified
+
+            # Get yesterday's price for this symbol to calculate real price change
+            prev_price = prev_prices.get(c["symbol"], 0)
+            price_change = (c["price"] - prev_price) if prev_price > 0 else (1 if oi_change > 0 else -1)
             sig = _signal(oi_change, price_change) if prev > 0 else "⚪ New"
             all_rows.append([
                 today, c["symbol"], c["expiry"], c["strike"],
