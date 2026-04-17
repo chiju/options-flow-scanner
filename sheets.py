@@ -53,7 +53,7 @@ SYMBOL_TYPES = {
 
 ALERT_HEADERS   = ["timestamp", "symbol", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike", "signal",
-                   "price_at_alert", "score", "buy_sell", "oi", "vol_oi_ratio"]
+                   "price_at_alert", "score", "buy_sell", "oi", "vol_oi_ratio", "iv_rank"]
 
 SYMBOL_HEADERS  = ["timestamp", "type", "strike", "expiry", "dte_bucket",
                    "volume", "premium_k", "iv", "delta", "sweep", "iv_spike"]
@@ -546,6 +546,7 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
                         entry.get("buy_sell", ""),
                         entry.get("oi", ""),
                         entry.get("vol_oi_ratio", ""),
+                        entry.get("iv_rank", ""),
                     ])
 
         _upsert_tracker(svc, sid, tracker_rows)

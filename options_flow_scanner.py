@@ -82,6 +82,10 @@ def score_alert(entry: dict) -> int:
     if entry.get("sweep"):    s += 2
     if entry.get("iv_spike"): s += 2
 
+    # IV Rank: low IV = cheap options = better risk/reward for buyers
+    iv_rank = entry.get("iv_rank", "")
+    if iv_rank and "Low" in iv_rank: s += 1  # buying cheap options = better edge
+
     # Vol/OI ratio: >5x = fresh unusual positioning (not just rolling existing)
     vol_oi = entry.get("vol_oi_ratio")
     if vol_oi and vol_oi >= 10: s += 2   # 10x+ = extremely unusual
@@ -97,6 +101,45 @@ def score_alert(entry: dict) -> int:
         elif entry.get("type") == "PUT" and delta > -0.4: s += 1
 
     return min(s, 10)
+
+
+def get_iv_rank(sym: str, current_iv: float, svc=None) -> str:
+    """
+    Calculate IV rank from last 30 days of UNUSUAL_ALERTS data.
+    IV Rank = (current - min) / (max - min) × 100
+    Returns: "IVR 85 🔴 High" or "IVR 20 🟢 Low" or ""
+    """
+    if not current_iv or not svc:
+        return ""
+    try:
+        from sheets import _service, SHEET_ID
+        if svc is None:
+            svc = _service()
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        r = svc.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:I"
+        ).execute()
+        rows = r.get("values", [])[1:]
+        ivs = []
+        for row in rows:
+            if len(row) >= 9 and row[1] == sym and row[0][:10] >= cutoff:
+                try:
+                    iv = float(row[8])
+                    if iv > 0:
+                        ivs.append(iv)
+                except (ValueError, IndexError):
+                    pass
+        if len(ivs) < 5:
+            return ""
+        iv_min, iv_max = min(ivs), max(ivs)
+        if iv_max == iv_min:
+            return ""
+        rank = round((current_iv - iv_min) / (iv_max - iv_min) * 100)
+        emoji = "🔴 High" if rank >= 70 else "🟢 Low" if rank <= 30 else "🟡 Mid"
+        return f"IVR {rank} {emoji}"
+    except Exception:
+        return ""
 
 
 def get_dynamic_symbols(top_n: int = 10) -> list:
@@ -599,6 +642,40 @@ def run_scan(force_send: bool = False):
     prices        = get_current_prices([r["symbol"] for r in results])
     price_changes = get_price_changes([r["symbol"] for r in results])
     earnings = get_earnings_this_week(ALL_SYMBOLS)
+
+    # Calculate IV rank per symbol (batch read UNUSUAL_ALERTS once)
+    try:
+        from sheets import _service, SHEET_ID
+        from datetime import timedelta
+        _svc = _service()
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        r_iv = _svc.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:I"
+        ).execute()
+        # Build IV history per symbol
+        iv_history = {}
+        for row in r_iv.get("values", [])[1:]:
+            if len(row) >= 9 and row[0][:10] >= cutoff:
+                try:
+                    iv = float(row[8])
+                    if iv > 0:
+                        iv_history.setdefault(row[1], []).append(iv)
+                except (ValueError, IndexError):
+                    pass
+        # Apply IV rank to entries
+        for r in results:
+            sym = r["symbol"]
+            ivs = iv_history.get(sym, [])
+            if len(ivs) >= 5:
+                iv_min, iv_max = min(ivs), max(ivs)
+                for entry in r["calls"] + r["puts"]:
+                    if entry.get("iv") and iv_max > iv_min:
+                        rank = round((entry["iv"] - iv_min) / (iv_max - iv_min) * 100)
+                        emoji = "🔴 High" if rank >= 70 else "🟢 Low" if rank <= 30 else "🟡 Mid"
+                        entry["iv_rank"] = f"IVR {rank} {emoji}"
+                        entry["score"] = score_alert(entry)
+    except Exception as e:
+        print(f"  IV rank error: {e}")
 
     # Store to sheets + get momentum
     momentum = store_results(results, prices, price_changes=price_changes, fixed_symbols=set(ALL_SYMBOLS))
