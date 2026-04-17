@@ -702,4 +702,22 @@ if __name__ == "__main__":
     parser.add_argument("--afterhours", action="store_true", help="After-hours scan mode")
     args = parser.parse_args()
 
+    if args.premarket:
+        # Send market open reminder before scanning
+        try:
+            r = requests.get(
+                "https://paper-api.alpaca.markets/v2/clock",
+                headers={"APCA-API-KEY-ID": _key(), "APCA-API-SECRET-KEY": _secret()},
+                timeout=5
+            )
+            clock = r.json()
+            next_open = clock.get("next_open", "")[:16].replace("T", " ")
+            send_telegram(
+                f"🔔 *Market opens in ~30 min* ({next_open} ET)\n\n"
+                f"Check the morning brief for today's setup.\n"
+                f"_Options flow scanner starting pre-market scan..._"
+            )
+        except Exception:
+            pass
+
     run_scan(force_send=args.force or args.premarket or args.afterhours)
