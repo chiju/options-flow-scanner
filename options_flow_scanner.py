@@ -557,8 +557,25 @@ def filter_new_golden_flow(gf: list) -> list:
     return new
 
 
+def is_market_open() -> bool:
+    """Check market status via Alpaca clock API."""
+    try:
+        r = requests.get(
+            "https://paper-api.alpaca.markets/v2/clock",
+            headers={"APCA-API-KEY-ID": _key(), "APCA-API-SECRET-KEY": _secret()},
+            timeout=5
+        )
+        return r.json().get("is_open", False)
+    except Exception:
+        return True  # assume open if API fails
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def run_scan(force_send: bool = False):
+    if not force_send and not is_market_open():
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Market closed — skipping scan.")
+        return
+
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanning {len(ALL_SYMBOLS)} symbols...")
     client = OptionHistoricalDataClient(api_key=_key(), secret_key=_secret())
 
