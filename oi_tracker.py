@@ -26,11 +26,27 @@ ATM_RANGE = 0.15
 TOP_N = 5
 
 
-def _signal(oi_change: int, price_change: float) -> str:
-    if oi_change > 0 and price_change > 0:   return "🐂 Long Buildup"
-    if oi_change > 0 and price_change < 0:   return "🐻 Short Buildup"
-    if oi_change < 0 and price_change > 0:   return "🟡 Short Covering"
-    if oi_change < 0 and price_change < 0:   return "🟡 Long Unwinding"
+def _signal(oi_change: int, price_change: float, opt_type: str = "CALL") -> str:
+    """
+    Interpret OI change + price change correctly for calls and puts.
+    
+    CALLS:
+      OI↑ + price↑ = 🐂 Long Buildup (new call buyers = bullish)
+      OI↑ + price↓ = 🐻 Short Buildup (new call writers = bearish)
+    PUTS:
+      OI↑ + price↓ = 🐂 Long Buildup (new put buyers = bearish on stock, but conviction)
+      OI↑ + price↑ = 🛡️ Hedging (new put buyers while price rises = protecting longs)
+    """
+    if opt_type == "CALL":
+        if oi_change > 0 and price_change > 0:   return "🐂 Long Buildup"
+        if oi_change > 0 and price_change < 0:   return "🐻 Short Buildup"
+        if oi_change < 0 and price_change > 0:   return "🟡 Short Covering"
+        if oi_change < 0 and price_change < 0:   return "🟡 Long Unwinding"
+    else:  # PUT
+        if oi_change > 0 and price_change < 0:   return "🐻 Long Buildup (bearish)"
+        if oi_change > 0 and price_change > 0:   return "🛡️ Hedging"
+        if oi_change < 0 and price_change > 0:   return "🟡 Put Covering"
+        if oi_change < 0 and price_change < 0:   return "🟡 Put Unwinding"
     return "⚪ Neutral"
 
 
@@ -176,7 +192,7 @@ def run_oi_tracker(symbols: list):
             # Get yesterday's price for this symbol to calculate real price change
             prev_price = prev_prices.get(c["symbol"], 0)
             price_change = (c["price"] - prev_price) if prev_price > 0 else (1 if oi_change > 0 else -1)
-            sig = _signal(oi_change, price_change) if prev > 0 else "⚪ New"
+            sig = _signal(oi_change, price_change, c["type"]) if prev > 0 else "⚪ New"
             all_rows.append([
                 today, c["symbol"], c["expiry"], c["strike"],
                 c["type"], c["oi"], oi_change, c["vol"], c["price"], sig
