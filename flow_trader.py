@@ -190,6 +190,72 @@ def _execute_spread(symbol: str, spread: dict, expiry: str) -> bool:
         return False
 
 
+def check_exits() -> list:
+    """
+    Check open flow-trader positions and close if exit criteria met.
+    Exit rules:
+      1. 50% profit (spread worth half of credit received)
+      2. 2× loss (spread worth 3× credit received)
+      3. 7 days before expiry
+      4. Short strike breached (stock below sell strike)
+    """
+    try:
+        import requests, re
+        from datetime import date
+
+        BASE = "https://paper-api.alpaca.markets/v2"
+        H = {"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}
+
+        positions = requests.get(f"{BASE}/positions", headers=H).json()
+        if not isinstance(positions, list):
+            return []
+
+        closed = []
+        # Only look at short puts (our sell leg)
+        short_puts = [p for p in positions
+                      if float(p["qty"]) < 0 and re.search(r'\d{6}P\d{8}', p["symbol"])]
+
+        for p in short_puts:
+            sym_match = re.match(r'([A-Z]+)(\d{6})P(\d{8})', p["symbol"])
+            if not sym_match:
+                continue
+
+            underlying = sym_match.group(1)
+            exp_str = sym_match.group(2)
+            strike = int(sym_match.group(3)) / 1000
+
+            entry = abs(float(p["avg_entry_price"]))
+            current = abs(float(p["current_price"]))
+            profit_pct = (entry - current) / entry if entry > 0 else 0
+
+            # DTE
+            exp_date = datetime.strptime(exp_str, "%y%m%d").date()
+            dte = (exp_date - date.today()).days
+
+            reason = None
+            if profit_pct >= 0.50:
+                reason = f"50% profit ({profit_pct:.0%})"
+            elif profit_pct <= -2.0:
+                reason = f"2× stop loss ({profit_pct:.0%})"
+            elif dte <= 7:
+                reason = f"Near expiry ({dte}d)"
+
+            if reason:
+                # Close the short put
+                r = requests.post(f"{BASE}/orders", headers=H, json={
+                    "symbol": p["symbol"], "qty": "1", "side": "buy",
+                    "type": "market", "time_in_force": "day"
+                })
+                if r.ok:
+                    closed.append(f"✅ Closed {underlying} {p['symbol'][-15:]} | {reason}")
+                    print(f"  Closed: {underlying} | {reason}")
+
+        return closed
+    except Exception as e:
+        print(f"  Exit check error: {e}")
+        return []
+
+
 def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> dict:
     """Find appropriate strike for spread (10-15% OTM, DTE 21-45)."""
     try:
@@ -230,6 +296,12 @@ def run_flow_trader():
 
     svc = _service()
     _ensure_tabs(svc, SHEET_ID, ["FLOW_TRADE_LOG"])
+
+    # Check exits first
+    if not DRY_RUN:
+        closed = check_exits()
+        if closed:
+            print(f"  Closed {len(closed)} position(s)")
 
     # Write header if needed
     r = svc.spreadsheets().values().get(
