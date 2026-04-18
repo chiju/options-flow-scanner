@@ -249,6 +249,20 @@ def run_flow_trader():
         print("  No signals meet all criteria today.")
         return
 
+    # Check what's already been traded today (dedup)
+    r_log = svc.spreadsheets().values().get(
+        spreadsheetId=SHEET_ID, range="FLOW_TRADE_LOG!A:B"
+    ).execute()
+    already_traded = {row[1] for row in r_log.get("values", [])[1:]
+                      if len(row) >= 2 and row[0] == today}
+    if already_traded:
+        print(f"  Already traded today: {already_traded}")
+        signals = [s for s in signals if s["symbol"] not in already_traded]
+
+    if not signals:
+        print("  All signals already traded today.")
+        return
+
     print(f"  Found {len(signals)} confirmed signal(s):\n")
     today = datetime.now().strftime("%Y-%m-%d")
     trade_rows = []

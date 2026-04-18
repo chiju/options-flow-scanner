@@ -144,7 +144,9 @@ jobs:
 
   flow-trader:
     runs-on: ubuntu-latest
-    if: github.event.inputs.job == 'eod'
+    if: >
+      github.event.inputs.job == 'eod' ||
+      github.event.inputs.job == 'scan'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
