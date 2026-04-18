@@ -25,9 +25,9 @@ from datetime import datetime, timedelta
 from collections import Counter
 from sheets import _service, SHEET_ID, _append, _ensure_tabs
 
-DRY_RUN = True  # Set False to execute real paper trades
-PAPER_API_KEY    = os.environ.get("ALPACA_API_KEY", "")
-PAPER_API_SECRET = os.environ.get("ALPACA_SECRET_KEY", "")
+DRY_RUN = False  # Paper trading on CSP account
+PAPER_API_KEY    = os.environ.get("ALPACA_CSP_API_KEY", os.environ.get("ALPACA_API_KEY", ""))
+PAPER_API_SECRET = os.environ.get("ALPACA_CSP_SECRET_KEY", os.environ.get("ALPACA_SECRET_KEY", ""))
 
 TRADE_LOG_HEADERS = [
     "date", "symbol", "signal_type", "direction", "score",
@@ -145,6 +145,51 @@ def get_confirmed_signals(svc, lookback_days: int = 2) -> list:
     return sorted(confirmed, key=lambda x: x["confluence"], reverse=True)
 
 
+def _execute_spread(symbol: str, spread: dict, expiry: str) -> bool:
+    """Submit bull put spread to Alpaca paper account."""
+    try:
+        import requests
+        from datetime import datetime as _dt
+
+        BASE = "https://paper-api.alpaca.markets/v2"
+        H = {"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}
+
+        # Format expiry as YYMMDD for OCC symbol
+        exp_dt = _dt.strptime(expiry, "%Y-%m-%d")
+        exp_occ = exp_dt.strftime("%y%m%d")
+
+        def occ(sym, exp, cp, strike):
+            """Build OCC option symbol: AAPL260117C00150000"""
+            strike_str = f"{int(strike * 1000):08d}"
+            return f"{sym}{exp}{cp}{strike_str}"
+
+        sell_sym = occ(symbol, exp_occ, "P", spread["sell_strike"])
+        buy_sym  = occ(symbol, exp_occ, "P", spread["buy_strike"])
+
+        # Sell higher strike put
+        r1 = requests.post(f"{BASE}/orders", headers=H, json={
+            "symbol": sell_sym, "qty": "1", "side": "sell",
+            "type": "market", "time_in_force": "day"
+        })
+        # Buy lower strike put
+        r2 = requests.post(f"{BASE}/orders", headers=H, json={
+            "symbol": buy_sym, "qty": "1", "side": "buy",
+            "type": "market", "time_in_force": "day"
+        })
+
+        if r1.ok and r2.ok:
+            print(f"     Sell {sell_sym}: {r1.status_code}")
+            print(f"     Buy  {buy_sym}: {r2.status_code}")
+            return True
+        else:
+            print(f"     Order error: sell={r1.status_code} {r1.text[:100]}")
+            print(f"                  buy={r2.status_code} {r2.text[:100]}")
+            return False
+    except Exception as e:
+        print(f"     Execution error: {e}")
+        return False
+
+
 def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> dict:
     """Find appropriate strike for spread (10-15% OTM, DTE 21-45)."""
     try:
@@ -243,6 +288,13 @@ def run_flow_trader():
             "DRY_RUN" if DRY_RUN else "PENDING",
             str(DRY_RUN)
         ])
+
+        # Execute if not dry run
+        if not DRY_RUN:
+            executed = _execute_spread(sym, spread, expiry_str)
+            if executed:
+                trade_rows[-1][15] = "SUBMITTED"
+                print(f"     ✅ Order submitted to paper account")
 
     if trade_rows:
         _append(svc, SHEET_ID, "FLOW_TRADE_LOG", trade_rows)
