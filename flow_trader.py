@@ -233,10 +233,10 @@ def check_exits() -> list:
             dte = (exp_date - date.today()).days
 
             reason = None
-            if profit_pct >= 0.50:
-                reason = f"50% profit ({profit_pct:.0%})"
-            elif profit_pct <= -2.0:
-                reason = f"2× stop loss ({profit_pct:.0%})"
+            if profit_pct >= 0.70:  # 70% profit = professional standard
+                reason = f"70% profit ({profit_pct:.0%})"
+            elif profit_pct <= -1.5:  # Stop at 1.5× credit (spread at $7.50 on $10 spread)
+                reason = f"Stop loss ({profit_pct:.0%})"
             elif dte <= 7:
                 reason = f"Near expiry ({dte}d)"
 
@@ -265,25 +265,25 @@ def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> di
             return {}
 
         if direction == "BULLISH":
-            # Sell PUT spread: strike 12% below current price
+            # Sell PUT spread: strike 12% below current price, $10 wide
             sell_strike = round(price * (1 - otm_pct) / 5) * 5  # round to $5
-            buy_strike  = sell_strike - 5  # $5 wide spread
+            buy_strike  = sell_strike - 10  # $10 wide spread (professional standard)
             return {
                 "type": "BULL_PUT_SPREAD",
                 "sell_strike": sell_strike,
                 "buy_strike": buy_strike,
-                "spread_width": 5,
+                "spread_width": 10,
                 "current_price": round(price, 2),
             }
         else:
-            # Sell CALL spread: strike 12% above current price
+            # Sell CALL spread: strike 12% above current price, $10 wide
             sell_strike = round(price * (1 + otm_pct) / 5) * 5
-            buy_strike  = sell_strike + 5
+            buy_strike  = sell_strike + 10
             return {
                 "type": "BEAR_CALL_SPREAD",
                 "sell_strike": sell_strike,
                 "buy_strike": buy_strike,
-                "spread_width": 5,
+                "spread_width": 10,
                 "current_price": round(price, 2),
             }
     except Exception as e:
@@ -352,10 +352,10 @@ def run_flow_trader():
             print(f"     ⚠️ Could not find spread strike\n")
             continue
 
-        # Estimate credit (rough: $0.50-1.50 per $5 spread)
-        est_credit = 1.00  # $1 per spread = $100 per contract
-        max_loss = (spread["spread_width"] - est_credit) * 100  # per contract
-        target = est_credit * 0.5 * 100  # 50% profit target
+        # Estimate credit ($10 wide spread, target $3-5 credit = 30-50% of width)
+        est_credit = 3.50  # $3.50 per spread = $350 per contract (conservative)
+        max_loss = (spread["spread_width"] - est_credit) * 100  # $650 per contract
+        target = est_credit * 0.70 * 100  # 70% profit target = $245
 
         action = f"SELL {spread['type']}: ${spread['sell_strike']}/{spread['buy_strike']}"
         print(f"     Action: {action}")
