@@ -250,6 +250,47 @@ python oi_tracker.py                     # EOD OI snapshot
 
 ---
 
+## Adaptive Strategy Framework (Target)
+
+The system is designed to use the right strategy for each signal type:
+
+```
+Signal quality → Strategy selection
+
+⭐⭐⭐ HIGH confluence + 3-sweep + OI confirmed
+  + GEX negative (amplified move)
+  + Low IV rank (cheap options)
+  → BUY the option (asymmetric, 3-5× return)
+  → Size: 0.5% of account
+
+⭐⭐ Medium confluence + 3-sweep
+  + Stock in uptrend
+  → SELL put spread (high probability income)  ← CURRENT
+  → Size: 2% of account
+
+⭐ Low confluence / single sweep
+  → SKIP
+
+Persistent (same contract 5+ days, consolidating)
+  → SELL put spread closer to money
+  → Size: 1% of account
+
+Capitulation flip (weeks of puts → sudden calls)
+  → BUY calls aggressively
+  → Size: 1% of account
+```
+
+**Data already collected to support this:**
+- Confluence score ✅ | Sweep count ✅ | IV rank ✅
+- GEX regime ✅ | Price trend ✅ | OI confirmation ✅
+
+**Missing for full adaptive system:**
+- 20/50 day MA (price trend direction)
+- 30 days of IV rank history
+- Capitulation flip detection
+
+---
+
 ## Roadmap
 
 | Phase | Status | Description |
