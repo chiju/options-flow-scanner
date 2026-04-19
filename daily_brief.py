@@ -356,6 +356,14 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
     except Exception:
         pass
 
+    # Earnings this week
+    try:
+        from earnings import get_earnings_this_week
+        from options_flow_scanner import ALL_SYMBOLS as _ALL
+        earnings = get_earnings_this_week(_ALL, days_ahead=7)
+    except Exception:
+        earnings = {}
+
     return {
         "alerts":  alerts[:50],
         "signals": signals[:30],
@@ -366,6 +374,7 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
         "gamma":   gamma,
         "history": history_ctx,
         "price_trend": price_trend,
+        "earnings": earnings,
         "period":  f"Last {hours_back} hours",
         "timestamp": datetime.now().strftime("%b %d %H:%M"),
     }
@@ -451,6 +460,13 @@ def format_data_for_ai(data: dict, mode: str) -> str:
             mood = "🟢" if s["bullish"] > s["bearish"] else ("🔴" if s["bearish"] > s["bullish"] else "⚪")
             lines.append(f"{sym}: {s['mentions']} mentions {mood}")
 
+    # Earnings calendar
+    earnings = data.get("earnings", {})
+    if earnings:
+        lines.append("\n--- EARNINGS THIS WEEK ---")
+        for sym, date in sorted(earnings.items(), key=lambda x: x[1]):
+            lines.append(f"{sym}: reports {date}")
+
     return "\n".join(lines)
 
 
@@ -503,6 +519,21 @@ Symbol names — always write "Full Name (TICKER)": S&P 500 (SPY), Nasdaq (QQQ),
 
 DATA:
 {data}"""
+
+WEEKEND_INSTRUCTION = """WEEKEND BRIEF — markets closed, focus on what matters for Monday:
+
+STEP 1 — MACRO NEWS: What geopolitical/economic events happened this weekend? (from MACRO NEWS section)
+STEP 2 — FRIDAY'S POSITIONING: What large OI positions were built Friday? (from GAMMA LEVELS and HISTORICAL CONTEXT)
+STEP 3 — EARNINGS THIS WEEK: Which stocks report earnings next week? How might flow signals be affected?
+STEP 4 — MONDAY SETUP: Based on weekend news + Friday's positioning, what are the highest-probability setups for Monday open?
+
+Write 4 short paragraphs:
+  Para 1: Weekend macro events and their market impact
+  Para 2: Key positions built Friday (OI data) — what are institutions positioned for?
+  Para 3: Earnings this week — which of your holdings report?
+  Para 4: Monday open setup — what to watch, what direction, what levels
+
+Be specific. Cite exact strikes and premiums from the data."""
 
 MORNING_INSTRUCTION = """MORNING BRIEF — reason step by step, then write the brief:
 
@@ -672,6 +703,8 @@ def run_brief(mode: str = "morning"):
     data_str = format_data_for_ai(data, mode)
 
     instruction = MORNING_INSTRUCTION if mode == "morning" else EVENING_INSTRUCTION
+    if header_note and "Weekend" in (header_note or ""):
+        instruction = WEEKEND_INSTRUCTION
     analyst_prompt = ANALYST_PROMPT.format(mode_instruction=instruction, data=data_str)
 
     # Run both analysts using fallback chains
