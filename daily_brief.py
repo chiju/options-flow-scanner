@@ -104,13 +104,19 @@ def fetch_finnhub_macro() -> list:
             timeout=8
         )
         if not r.ok: return []
-        keywords = ["hormuz","iran","oil","war","fed","inflation","tariff","china","opec","rate","gdp","crude","ceasefire"]
+        keywords = ["hormuz","iran","oil","war","fed","inflation","tariff","china","opec","rate","gdp","crude","ceasefire","attack","blocked","closed","missile","strike"]
+        # Override FinBERT for clear bearish geopolitical events
+        bearish_override = ["blocked","closed","attack","fired","missile","strike","war","sanction"]
         macro = []
         for a in r.json()[:30]:
             headline = a.get("headline", "").lower()
             if any(k in headline for k in keywords):
-                label, _ = _finbert_score(a["headline"])
-                emoji = "🟢" if label=="positive" else "🔴" if label=="negative" else "⚪"
+                # Check for clear bearish override
+                if any(k in headline for k in bearish_override):
+                    emoji = "🔴"
+                else:
+                    label, _ = _finbert_score(a["headline"])
+                    emoji = "🟢" if label=="positive" else "🔴" if label=="negative" else "⚪"
                 macro.append(f"{emoji} {a['headline'][:80]}")
         return macro[:6]
     except Exception as e:
