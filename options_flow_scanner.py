@@ -641,7 +641,31 @@ def run_scan(force_send: bool = False):
     vix           = get_vix()
     prices        = get_current_prices([r["symbol"] for r in results])
     price_changes = get_price_changes([r["symbol"] for r in results])
-    earnings = get_earnings_this_week(ALL_SYMBOLS)
+    # Only fetch earnings once per day (not every 15-min scan)
+    from datetime import date as _date
+    _earnings_cache_date = getattr(run_scan, '_earnings_date', None)
+    if _earnings_cache_date != _date.today():
+        earnings = get_earnings_this_week(ALL_SYMBOLS, days_ahead=30)
+        run_scan._earnings_date = _date.today()
+        run_scan._earnings_cache = earnings
+        # Update EARNINGS_CALENDAR sheet
+        try:
+            from sheets import _service, SHEET_ID, SYMBOL_NAMES
+            _svc = _service()
+            from datetime import datetime as _dt
+            rows = [["symbol", "name", "earnings_date", "days_away"]]
+            today = _date.today()
+            for sym, date_str in sorted(earnings.items(), key=lambda x: x[1]):
+                name = SYMBOL_NAMES.get(sym, sym)
+                earn_date = _dt.strptime(f"2026 {date_str}", "%Y %b %d").date()
+                rows.append([sym, name, date_str, (earn_date - today).days])
+            _svc.spreadsheets().values().clear(spreadsheetId=SHEET_ID, range="EARNINGS_CALENDAR!A:Z").execute()
+            _svc.spreadsheets().values().update(spreadsheetId=SHEET_ID, range="EARNINGS_CALENDAR!A1",
+                valueInputOption="RAW", body={"values": rows}).execute()
+        except Exception as e:
+            print(f"  Earnings calendar update error: {e}")
+    else:
+        earnings = getattr(run_scan, '_earnings_cache', {})
 
     # Calculate IV rank per symbol (batch read UNUSUAL_ALERTS once)
     try:
