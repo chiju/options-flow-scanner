@@ -642,6 +642,31 @@ def call_groq(prompt: str) -> str:
 def run_brief(mode: str = "morning"):
     print(f"[{datetime.now().strftime('%H:%M')}] Running {mode} brief...")
 
+    # Check if market is open or was open today
+    try:
+        import pytz
+        et_now = datetime.now(pytz.timezone('America/New_York'))
+        is_weekend = et_now.weekday() >= 5
+        # Check Alpaca clock for holidays
+        clock_r = requests.get(
+            "https://paper-api.alpaca.markets/v2/clock",
+            headers={"APCA-API-KEY-ID": _alpaca_key(), "APCA-API-SECRET-KEY": _alpaca_secret()},
+            timeout=5
+        )
+        clock = clock_r.json()
+        next_open = clock.get("next_open", "")[:16].replace("T", " ")
+        is_holiday = not clock.get("is_open") and et_now.hour >= 9 and et_now.weekday() < 5
+
+        if is_weekend:
+            day_name = et_now.strftime("%A")
+            header_note = f"📅 {day_name} — Weekend brief (macro/geopolitical news only)"
+        elif is_holiday:
+            header_note = f"🏖️ US Market Holiday — Next open: {next_open} ET"
+        else:
+            header_note = None
+    except Exception:
+        header_note = None
+
     hours = 18 if mode == "morning" else 8
     data = fetch_brief_data(hours_back=hours)
     data_str = format_data_for_ai(data, mode)
@@ -676,6 +701,8 @@ def run_brief(mode: str = "morning"):
     now = datetime.now().strftime("%b %d %H:%M")
 
     msg = f"🌅 AI {title} — {now}\n\n" if emoji == "🌅" else f"🌆 AI {title} — {now}\n\n"
+    if header_note:
+        msg = f"🌅 AI {title} — {now}\n{header_note}\n\n" if emoji == "🌅" else f"🌆 AI {title} — {now}\n{header_note}\n\n"
     # Strip all markdown to avoid Telegram parse errors
     clean = consolidated.replace("**", "").replace("*", "•").replace("_", "")
     msg += clean
