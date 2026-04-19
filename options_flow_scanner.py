@@ -386,18 +386,9 @@ def sector_rotation_signal(results: list) -> str:
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 def send_telegram(text: str):
-    token, chat = _tg_token(), _tg_chat()
-    if not token or not chat:
-        print(text); return
-    for chunk in [text[i:i+4000] for i in range(0, len(text), 4000)]:
-        try:
-            r = requests.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat, "text": chunk,
-                      "parse_mode": "Markdown", "disable_web_page_preview": True},
-                timeout=10,
-            )
-            if not r.ok: print(f"Telegram error: {r.text}")
+def send_telegram(text: str):
+    from notifier import send as _send
+    _send(text)
         except Exception as e:
             print(f"Telegram error: {e}")
 
