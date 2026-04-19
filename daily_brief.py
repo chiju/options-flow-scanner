@@ -118,6 +118,35 @@ def fetch_finnhub_macro() -> list:
         return []
 
 
+def fetch_reddit_sentiment(symbols: list) -> dict:
+    """Scrape WSB/stocks/investing for symbol mentions. No API key needed."""
+    from collections import defaultdict
+    results = defaultdict(lambda: {"mentions": 0, "bullish": 0, "bearish": 0})
+    bull_words = {"buy", "calls", "moon", "bullish", "long", "breakout", "squeeze"}
+    bear_words = {"sell", "puts", "short", "bearish", "crash", "dump", "downside"}
+
+    for sub in ["wallstreetbets", "stocks", "investing"]:
+        try:
+            r = requests.get(
+                f"https://www.reddit.com/r/{sub}/hot.json?limit=25",
+                headers={"User-Agent": "OptionsBot/1.0"}, timeout=8
+            )
+            if not r.ok: continue
+            for post in r.json()["data"]["children"]:
+                d = post["data"]
+                title = d.get("title", "").upper()
+                text = (d.get("selftext", "") + " " + title).lower()
+                for sym in symbols:
+                    if f"${sym}" in title or f" {sym} " in f" {title} ":
+                        results[sym]["mentions"] += 1
+                        words = set(text.split())
+                        if words & bull_words: results[sym]["bullish"] += 1
+                        elif words & bear_words: results[sym]["bearish"] += 1
+        except Exception:
+            continue
+    return {k: v for k, v in results.items() if v["mentions"] > 0}
+
+
 def fetch_macro_news(hours_back: int = 18) -> list:
     """Fetch untagged macro/geopolitical news from Alpaca (no symbol filter)."""
     if not _alpaca_key():
