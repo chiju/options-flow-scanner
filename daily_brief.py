@@ -57,7 +57,33 @@ def _finbert_score(text: str) -> tuple[str, float]:
 
 
 # ── Reddit Sentiment (free, no API key) ───────────────────────────────────────
-def fetch_reddit_sentiment(symbols: list) -> dict:
+def fetch_macro_news(hours_back: int = 18) -> list:
+    """Fetch untagged macro/geopolitical news from Alpaca (no symbol filter)."""
+    if not _alpaca_key():
+        return []
+    try:
+        from datetime import timezone
+        start = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        r = requests.get(
+            "https://data.alpaca.markets/v1beta1/news",
+            headers={"APCA-API-KEY-ID": _alpaca_key(), "APCA-API-SECRET-KEY": _alpaca_secret()},
+            params={"start": start, "limit": 20, "sort": "desc"},
+            timeout=10
+        )
+        if not r.ok:
+            return []
+        # Filter for macro/geopolitical keywords
+        keywords = ["hormuz","iran","oil","war","fed","inflation","tariff","china","russia","opec","rate","gdp"]
+        macro = []
+        for a in r.json().get("news", []):
+            headline = a.get("headline", "").lower()
+            if any(k in headline for k in keywords):
+                label, _ = _finbert_score(a["headline"])
+                emoji = "🟢" if label=="positive" else "🔴" if label=="negative" else "⚪"
+                macro.append(f"{emoji} {a['headline'][:80]}")
+        return macro[:5]
+    except Exception:
+        return []
     """Scrape WSB/stocks/investing for symbol mentions. No API key needed."""
     from collections import defaultdict
     results = defaultdict(lambda: {"mentions": 0, "bullish": 0, "bearish": 0})
@@ -210,6 +236,7 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
     top_syms = [row[1] for row in tracker[1:21] if len(row) > 1]
     news   = fetch_news_sentiment(top_syms, hours_back)
     reddit = fetch_reddit_sentiment(top_syms)
+    macro  = fetch_macro_news(hours_back)
 
     # Gamma levels — nearest expiry per symbol
     gamma = {}
@@ -231,6 +258,7 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
         "tracker": tracker[:20],
         "news":    news,
         "reddit":  reddit,
+        "macro":   macro,
         "gamma":   gamma,
         "history": history_ctx,
         "price_trend": price_trend,
@@ -256,6 +284,13 @@ def format_data_for_ai(data: dict, mode: str) -> str:
     for row in data["tracker"][1:]:
         if len(row) >= 4:
             lines.append(f"{row[1]}: signal={row[2]} P/C={row[3]} calls={row[4] if len(row)>4 else '?'} puts={row[5] if len(row)>5 else '?'}")
+
+    # Macro/geopolitical news (untagged, oil/war/fed/tariff)
+    macro = data.get("macro", [])
+    if macro:
+        lines.append("\n--- MACRO NEWS (geopolitical/oil/fed - untagged) ---")
+        for h in macro:
+            lines.append(f"  {h}")
 
     # Historical context
     history = data.get("history", [])
