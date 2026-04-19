@@ -1,130 +1,105 @@
 # Options Flow Scanner 📊
 
-> Institutional options flow intelligence — tracks smart money across 47 symbols every 15 minutes.
-> Silent alerts only on Golden Flow or ⭐⭐⭐ high confluence. AI daily briefs with memory.
+> Institutional options flow intelligence + automated paper trading.
+> Tracks smart money across 47 symbols every 15 minutes. Executes bull put spreads on confirmed signals.
 
-**Goal:** Flow + news + GEX + price trend → confluence score → probability → edge measurement → trade
+**Goal:** Flow + news + GEX + price trend → confluence → automated spread selling → measured edge
 
 ---
 
-## System Architecture
+## Two-Repo System
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     TWO-REPO SYSTEM                                  │
-│                                                                      │
-│  options-flow-scanner          alpaca-news-bot                      │
-│  ─────────────────────         ───────────────                      │
-│  ANALYSIS ENGINE               TRADING ENGINE                       │
-│                                                                      │
-│  • Options flow (Alpaca)       • News digest (FinBERT)              │
-│  • Signal scoring 1-10         • Reddit sentiment                   │
-│  • Confluence detection        • Paper trading strategies           │
-│  • GEX / Max Pain / OI         • P&L tracking                      │
-│  • FinBERT news sentiment      • 5 isolated paper accounts          │
-│  • Reddit buzz                 • Daily P&L report                   │
-│  • 3-AI daily brief            • PERFORMANCE_LOG                    │
-│  • Signal accuracy tracking                                         │
-└─────────────────────────────────────────────────────────────────────┘
+options-flow-scanner  ←  ANALYSIS + TRADING ENGINE (this repo)
+alpaca-news-bot       ←  NEWS DIGEST + OTHER STRATEGIES
 ```
 
 ---
 
-## options-flow-scanner — Full Pipeline
+## Full Pipeline
 
 ```
 cron-job.org
 │
-├── Every 15 min (Mon-Fri 16:00-22:45 Berlin)
+├── Every 15 min (Mon-Fri 16:00-23:45 Berlin)
 │   └── SCAN (silent mode)
-│       ├── Alpaca: fetch options chain (47+ symbols, 45 DTE max)
+│       ├── Fetch options chain (47 symbols, Alpaca API)
 │       ├── Score each contract 1-10
 │       ├── Detect: Golden Flow, Net Premium, Sector Rotation
-│       ├── Confluence: flow + news + GEX
+│       ├── Confluence: flow + news (FinBERT) + GEX
 │       ├── Write → SYMBOL_TRACKER, UNUSUAL_ALERTS, SIGNAL_HISTORY
-│       └── Telegram ONLY if: Golden Flow OR ⭐⭐⭐ HIGH confluence
-│           (deduped: once per contract per day)
+│       ├── Telegram ONLY if: Golden Flow OR ⭐⭐⭐ HIGH confluence
+│       └── flow_trader: execute spread if 3-sweep signal confirmed
 │
-├── 14:00 UTC (8am ET / 10:00 Berlin) — Morning Brief
-│   └── DAILY_BRIEF --morning
-│       ├── Reads: last 18h flow + 3-day history + GEX + news + Reddit
-│       ├── Chain-of-Thought: price trend → filter hedges → score confluence
-│       ├── Gemini (Analyst 1) + Groq (Analyst 2) + Gemini (Verifier)
-│       └── Telegram: ✅ CONSENSUS / ⚠️ UNCERTAIN / 💡 UNIQUE / 📊 FINAL BRIEF
+├── 14:00 UTC (8am ET / 16:00 Berlin) — Morning Brief
+│   └── Reads last 18h + 3-day history + GEX + news + Reddit
+│       Chain-of-Thought: price trend → filter hedges → score confluence
+│       Gemini + Groq + Gemini verifier → Telegram
 │
-├── 15:00 UTC (9am ET) — Pre-market scan
+├── 15:00 UTC (9am ET) — Pre-market + market open reminder
 │
-├── 20:30 UTC (4:30pm ET / 22:30 Berlin) — EOD Bundle (5 jobs parallel)
-│   ├── SCAN --afterhours
-│   ├── DAILY_BRIEF --evening
-│   ├── OI_TRACKER → OI_SNAPSHOT (real OI per strike, yfinance)
-│   ├── GAMMA_LEVELS → Max Pain, Call Wall, Put Wall, GEX time series
-│   └── SIGNAL_OUTCOMES → was the signal right? 1d/3d price check
+├── 22:30 UTC (4:30pm ET / 00:30 Berlin) — EOD Bundle
+│   ├── scan --afterhours
+│   ├── daily-brief --evening
+│   ├── oi-tracker (real OI per strike, yfinance)
+│   ├── gamma-levels (Max Pain, Call Wall, Put Wall, GEX)
+│   ├── signal-outcomes (was signal right? 1d/3d price check)
+│   └── flow-trader (execute/exit spreads on CSP paper account)
 │
-└── 22:00 UTC Friday — Weekly Summary → Telegram digest
+└── 22:00 UTC Friday — Weekly Summary
 ```
 
 ---
 
-## Telegram Alerts
+## Flow Trader — Automated Paper Trading
 
-**High Conviction Alert** (fires when Golden Flow OR ⭐⭐⭐ confluence):
+Executes bull put spreads on the CSP paper account ($101K) when signals meet all criteria.
+
+### Entry Gates (ALL must pass)
+
+| Gate | Criteria | Why |
+|------|---------|-----|
+| Three-sweep rule | Same contract swept 3+ times | "One sweep is luck, three is conviction" (CBOE) |
+| Score | ≥ 8 | Institutional size + urgency |
+| Premium | ≥ $1M per sweep | Filters retail noise |
+| Market open | Alpaca clock API | No bad fills |
+| Dedup | Not already traded today | Prevents double execution |
+
+### Trade Setup
+
 ```
-🚨 High Conviction Alert — Apr 16 16:01
-
-⭐ Golden Flow
-🐂 CALL CoreWeave (CRWV) $120 May08  ⭐8  💰 $7,753K
-  └ ⭐ Low (flow🐂)
-🐂 CALL MicroStrategy (MSTR) $136 Apr17  ⭐8  💰 $4,675K
-  └ ⭐⭐ Medium (flow🐂 + news🟢)
-
-SPY P/C 1.19 | VIX 18.59
+Signal: BULLISH (call sweeps confirmed)
+Action: SELL BULL PUT SPREAD
+  Sell strike: 12% OTM (delta ~0.20)
+  Buy strike:  $10 below sell strike
+  DTE:         30 days
+  Credit:      ~$3.50 per spread
+  Max loss:    $650 per contract
+  Position:    2% of account max
 ```
 
-**Morning/Evening Brief** (2x daily):
-```
-📊 FINAL BRIEF:
-Market is cautious (SPY P/C 1.47). GLD puts are hedges (gold up +0.5%).
-Real signal: ARKK calls swept 9x over 2 days = institutional conviction.
-IWM puts ($12.7M) align with bearish P/C — small caps under pressure.
-Watch: ARKK CALL $71 Apr17 (expires tomorrow, already ITM at $76).
-```
+### Exit Rules (automated, every 15 min)
 
----
+| Rule | Trigger | Action |
+|------|---------|--------|
+| 70% profit | Spread worth 30% of credit | Close → keep $245 |
+| Stop loss | Spread worth 2.5× credit | Close → limit loss |
+| Near expiry | 7 days to expiry | Close → avoid gamma |
 
-## Google Sheets — Options Flow Tracker
+### This Week's Results (Apr 14-17)
 
-| Tab | What's stored | Updated |
-|-----|--------------|---------|
-| `SYMBOL_TRACKER` | symbol, name, type, interpretation, P/C, net premium, price, price_chg | Every 15 min |
-| `UNUSUAL_ALERTS` | All $5M+ flows or sweeps with score, buy/sell, OI | Every 15 min |
-| `SIGNAL_HISTORY` | Signal flips, sweep≥8, 3-day persistence | Every 15 min |
-| `OI_SNAPSHOT` | Real OI per strike (yfinance) | EOD |
-| `GAMMA_LEVELS` | Max Pain, Call Wall, Put Wall, GEX per symbol/expiry | EOD |
-| `SIGNAL_OUTCOMES` | Was signal right? 1d/3d price + OI confirmation | EOD |
-| `BRIEF_LOG` | AI brief history | 2x daily |
-| `EARNINGS_TRACKER` | Pre/post earnings flow accuracy | On earnings |
-
-### SYMBOL_TRACKER columns
-```
-symbol | name | type | interpretation | pc_ratio | net_premium_k | price | price_chg | call_vol | put_vol
-
-Interpretation (P/C + price direction):
-  🛡️ Hedging    = puts high BUT price rising → protecting longs (not bearish)
-  😨 Fear        = puts high AND price falling → real bearish conviction
-  🔥 Greed       = calls high AND price rising → pure bullish
-  ⚠️ Complacency = calls high BUT price falling → ignoring risk
-  🟢 Call bias   = neutral P/C but call $ dominates
-  🔴 Put bias    = neutral P/C but put $ dominates
-```
+| Signal | Sweeps | Action | Outcome |
+|--------|--------|--------|---------|
+| ARKK CALL $71 Apr17 | 18x | Sell $70/$60 put spread | ARKK +10.1% ✅ |
+| AMZN CALL $205 Apr20 | 10x | Sell $220/$210 put spread | AMZN +4.4% ✅ |
 
 ---
 
 ## Signal Intelligence Layers
 
 ```
-Layer 1: FLOW      → Vol > OI = new positions (not closing)
-Layer 2: PREMIUM   → Score 1-10 (size + sweep + IV + DTE + delta)
+Layer 1: FLOW      → Sweep detected (15-min scan)
+Layer 2: PREMIUM   → Score 1-10 (size + sweep + IV + DTE)
 Layer 3: DIRECTION → P/C ratio + net premium (call$ - put$)
 Layer 4: CONTEXT   → Price trend (hedge vs directional)
 Layer 5: NEWS      → FinBERT sentiment (Alpaca News API)
@@ -134,6 +109,33 @@ Layer 8: HISTORY   → Signal outcomes (was it right before?)
 Layer 9: STORY     → AI brief (what does it all mean?)
 
 ⭐⭐⭐ HIGH confluence = layers 1+5+7 all agree = highest probability
+```
+
+---
+
+## Google Sheets
+
+| Tab | Purpose | Updated |
+|-----|---------|---------|
+| `SYMBOL_TRACKER` | symbol, name, type, interpretation, P/C, net premium, price, price_chg | Every 15 min |
+| `UNUSUAL_ALERTS` | All $5M+ flows or sweeps with score, IV rank | Every 15 min |
+| `SIGNAL_HISTORY` | Signal flips, sweep≥8, 3-day persistence | Every 15 min |
+| `OI_SNAPSHOT` | Real OI per strike (yfinance), significant changes only | EOD |
+| `GAMMA_LEVELS` | Max Pain, Call Wall, Put Wall, GEX per symbol/expiry | EOD |
+| `SIGNAL_OUTCOMES` | Was signal right? 1d/3d price + OI confirmation | EOD |
+| `FLOW_TRADE_LOG` | Every trade executed by flow_trader | EOD/scan |
+| `BRIEF_LOG` | AI brief history | 2x daily |
+| `MY_HOLDINGS` | Your portfolio with cost basis | Manual update |
+
+### SYMBOL_TRACKER Interpretation Column
+
+```
+🛡️ Hedging    = puts high BUT price rising → protecting longs (not bearish)
+😨 Fear        = puts high AND price falling → real bearish conviction
+🔥 Greed       = calls high AND price rising → pure bullish
+⚠️ Complacency = calls high BUT price falling → ignoring risk
+🟢 Call bias   = neutral P/C but call $ dominates
+🔴 Put bias    = neutral P/C but put $ dominates
 ```
 
 ---
@@ -152,36 +154,37 @@ Layer 9: STORY     → AI brief (what does it all mean?)
 | +2 | 0–7 DTE (expires this week) |
 | +1 | 8–30 DTE |
 | +1 | OTM delta |
+| +1 | IV rank low (buying cheap options) |
 
-**Golden Flow** = sweep + score≥8 + premium≥$1M → triggers Telegram alert
+**Golden Flow** = sweep + score≥8 + premium≥$1M → Telegram alert
 
 ---
 
 ## GEX (Gamma Exposure)
 
 ```
-GEX = gamma × OI × 100 × spot²  (per strike, summed across chain)
+GEX = gamma × OI × 100 × spot²
 
-Positive GEX → MMs buy dips / sell rips → price PINNED (low vol)
-Negative GEX → MMs amplify moves → price TRENDING (high vol)
+Positive GEX → MMs stabilize price (low vol, mean-reverting)
+Negative GEX → MMs amplify moves (trending, volatile)
 
-SPY GEX = -3.84M today → negative → moves will be amplified
+SPY GEX -3.94M this week → moves amplified → Friday was volatile ✅
 ```
 
 ---
 
 ## Watchlist (47 Fixed + Dynamic)
 
-| Group | Symbols |
-|-------|---------|
-| Index ETFs | SPY, QQQ, IWM |
-| Sector ETFs | XLK, XLF, XLE, XLV, GLD, TLT, ITA, USO, UUP, XBI, ARKK |
-| Defence | LMT, RTX, NOC, GD |
-| Cyber | CRWD, PANW, ZS |
-| Mega Caps | AAPL, GOOGL, MSFT, NVDA, AMZN, META, TSLA |
-| High Vol | AMD, COIN, MSTR, HOOD, SMCI, ARM, SNOW |
-| Portfolio | PLTR, CRWV, IONQ, OKLO, ACHR, DUOL, SOFI, PYPL, PATH, JOBY, UUUU, POET |
-| Dynamic | Top 10 most active (Alpaca Screener, each scan) |
+| Group | Symbols | Activity this week |
+|-------|---------|-------------------|
+| Index ETFs | SPY, QQQ, IWM | ✅ Active |
+| Sector ETFs | XLK, XLF, XLE, XLV, GLD, TLT, ITA, USO, UUP, XBI, ARKK | ✅ ARKK 18x swept |
+| Defence | LMT, RTX, NOC, GD | ⚪ Low |
+| Cyber | CRWD, PANW, ZS | ❌ None |
+| Mega Caps | AAPL, GOOGL, MSFT, NVDA, AMZN, META, TSLA | ✅ Active |
+| High Vol | AMD, COIN, MSTR, HOOD, SMCI, ARM, SNOW | ✅ MSTR 3x swept |
+| Portfolio | PLTR, CRWV, IONQ, OKLO, ACHR, DUOL, SOFI, PYPL, PATH, JOBY, UUUU, POET | ✅ IONQ +54.9% |
+| Dynamic | Top 10 most active (Alpaca Screener) | varies |
 
 ---
 
@@ -189,10 +192,10 @@ SPY GEX = -3.84M today → negative → moves will be amplified
 
 | Job ID | Berlin time | ET | Input | Runs |
 |--------|------------|-----|-------|------|
-| 7485766 | 16:00–22:45 every 15min | 10am–4:45pm | `scan` | Silent scan |
+| 7485766 | 16:00–23:45 every 15min | 10am–5:45pm | `scan` | Silent scan + flow_trader |
 | 7485841 | 14:00 | 8:00am | `brief` | Morning AI brief |
-| 7485847 | 15:00 | 9:00am | `premarket` | Pre-market scan |
-| 7485848 | 22:30 | 4:30pm | `eod` | EOD bundle (5 jobs) |
+| 7485847 | 15:00 | 9:00am | `premarket` | Pre-market + market open alert |
+| 7485848 | 22:30 | 4:30pm | `eod` | EOD bundle (6 jobs) |
 | 7485849 | 22:00 Fri | 4:00pm Fri | `weekly` | Weekly summary |
 
 ---
@@ -202,30 +205,30 @@ SPY GEX = -3.84M today → negative → moves will be amplified
 | File | Purpose |
 |------|---------|
 | `options_flow_scanner.py` | Main scanner: fetch, score, confluence, silent alert |
+| `flow_trader.py` | **NEW**: automated bull put spread execution on confirmed signals |
 | `sheets.py` | All Google Sheets read/write |
-| `daily_brief.py` | 3-AI council: CoT prompts, FinBERT, Reddit, price trend, memory |
+| `daily_brief.py` | 3-AI council: CoT prompts, FinBERT, Reddit, price trend, 3-day memory |
 | `gamma_levels.py` | Max Pain, Call Wall, Put Wall, GEX time series |
-| `oi_tracker.py` | Real OI per strike (yfinance), EOD |
+| `oi_tracker.py` | Real OI per strike (yfinance), significant changes only |
 | `signal_outcomes.py` | Signal accuracy: 1d/3d price + OI confirmation |
 | `earnings.py` | Upcoming earnings (Yahoo Finance) |
-| `earnings_tracker.py` | Pre/post earnings accuracy |
 | `weekly_summary.py` | Friday EOD digest |
 | `notifier.py` | Telegram sender |
-| `telegram_trigger.py` | Bot commands: /status /scan /brief /help |
+| `telegram_trigger.py` | Bot: /status /scan /brief /help |
 
 ---
 
 ## GitHub Secrets
 
 ```
-ALPACA_API_KEY / ALPACA_SECRET_KEY   Alpaca paper trading (options)
+ALPACA_API_KEY / ALPACA_SECRET_KEY   Options paper account (main)
+ALPACA_CSP_API_KEY / SECRET          CSP paper account (flow_trader)
 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
-GOOGLE_CREDENTIALS                   Service account JSON
-GOOGLE_OPTIONS_SHEET_ID              Options Flow Tracker sheet
-GOOGLE_AI_API / GOOGLE_AI_API_2      Gemini (aistudio.google.com, free)
-GROQ_API_KEY                         Groq (console.groq.com, free)
-OPENROUTER_API_KEY                   OpenRouter (openrouter.ai, free)
-HF_TOKEN                             HuggingFace (FinBERT sentiment)
+GOOGLE_CREDENTIALS / GOOGLE_OPTIONS_SHEET_ID
+GOOGLE_AI_API / GOOGLE_AI_API_2      Gemini
+GROQ_API_KEY                         Groq Llama
+OPENROUTER_API_KEY                   OpenRouter
+HF_TOKEN                             HuggingFace (FinBERT)
 ```
 
 ## Local Setup
@@ -238,6 +241,7 @@ uv pip install -r requirements.txt
 source ~/.alpaca/options-paper.env
 
 python options_flow_scanner.py --force   # full report
+python flow_trader.py                    # check/execute trades
 python daily_brief.py --morning          # morning brief
 python gamma_levels.py                   # EOD gamma levels
 python signal_outcomes.py                # EOD accuracy check
@@ -246,8 +250,19 @@ python oi_tracker.py                     # EOD OI snapshot
 
 ---
 
+## Roadmap
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 | ✅ Done | Data collection, signal detection, AI brief |
+| 2 | 🔄 Now | Validate edge — 6-8 weeks of SIGNAL_OUTCOMES data |
+| 3 | 📅 Later | Add buying options on ⭐⭐⭐ signals (real-time websocket) |
+| 4 | 📅 Later | Live account trading after paper validation |
+
+---
+
 ## Related
-[alpaca-news-bot](https://github.com/chiju/alpaca-news-bot) — Paper trading strategies (Wheel/CSP/Bull-Put/Iron-Condor/Covered-Call) that will consume signals from this repo when edge is proven.
+[alpaca-news-bot](https://github.com/chiju/alpaca-news-bot) — News digest + Wheel/CSP/Iron-Condor/Bull-Put paper strategies.
 
 ---
 
