@@ -776,20 +776,9 @@ def run_brief(mode: str = "morning"):
         print(f"  ⚠️ Brief log error: {e}")
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    chat  = os.environ.get("TELEGRAM_CHAT_ID", "")
-    if not token or not chat:
-        print("⚠️  No Telegram credentials")
-        print(msg)
-        return
-
-    for chunk in [msg[i:i+4000] for i in range(0, len(msg), 4000)]:
-        r = requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat, "text": chunk, "disable_web_page_preview": True},
-            timeout=10,
-        )
-        if not r.ok:
-            print(f"Telegram error: {r.status_code} {r.text[:100]}")
+    # Use notifier (supports multiple recipients including Akhila)
+    from notifier import send as _send
+    _send(msg)
     print(f"✅ {title} sent.")
 
 
