@@ -193,10 +193,13 @@ SPY GEX -3.94M this week → moves amplified → Friday was volatile ✅
 | Job ID | Berlin time | ET | Input | Runs |
 |--------|------------|-----|-------|------|
 | 7485766 | 16:00–23:45 every 15min | 10am–5:45pm | `scan` | Silent scan + flow_trader |
-| 7485841 | 14:00 | 8:00am | `brief` | Morning AI brief |
-| 7485847 | 15:00 | 9:00am | `premarket` | Pre-market + market open alert |
-| 7485848 | 22:30 | 4:30pm | `eod` | EOD bundle (6 jobs) |
+| 7485841 | 14:00 Mon-Fri | 8:00am | `brief` | Morning AI brief |
+| 7485847 | 15:00 Mon-Fri | 9:00am | `premarket` | Pre-market + market open alert |
+| 7485848 | 22:30 Mon-Fri | 4:30pm | `eod` | EOD bundle (6 jobs) |
 | 7485849 | 22:00 Fri | 4:00pm Fri | `weekly` | Weekly summary |
+| 7502534 | 23:30 Mon-Fri | 5:30pm | `oi` | OI tracker (1h after close, OCC data ready) |
+| 7502338 | 12:00 Sat+Sun | 8:00am | `digest` | Weekend news digest (alpaca-news-bot) |
+| 7502340 | 12:00 Sat+Sun | 8:00am | `brief` | Weekend AI brief (macro/geopolitical focus) |
 
 ---
 
@@ -248,9 +251,39 @@ python signal_outcomes.py                # EOD accuracy check
 python oi_tracker.py                     # EOD OI snapshot
 ```
 
+## News Sources
+
+| Source | What | When | Free? |
+|--------|------|------|-------|
+| Alpaca/Benzinga | Stock-tagged news (FinBERT scored) | 5x/day + weekends | ✅ (with Alpaca) |
+| Finnhub | Macro/geopolitical news (Hormuz, Fed, oil, war) | 24/7 including weekends | ✅ free tier |
+| Reddit | WSB/stocks/investing buzz | In daily brief | ✅ no key needed |
+
+Finnhub catches untagged macro events that Alpaca misses (e.g. "Strait of Hormuz blocked").
+Bearish keywords (blocked/attack/missile/war) override FinBERT scoring for accuracy.
+
 ---
 
-## Adaptive Strategy Framework (Target)
+## Weekend Brief
+
+Runs Saturday and Sunday at 12:00 Berlin via cron-job.org.
+
+Uses `WEEKEND_INSTRUCTION` — different from weekday:
+- **Macro news overrides stale flow signals** (Hormuz closed = bearish, even if Friday had call sweeps)
+- Focuses on: weekend events → Friday OI positioning → earnings this week → Monday setup
+- Finnhub provides 24/7 news coverage for weekends
+
+---
+
+## Telegram Recipients
+
+Alerts sent to multiple recipients via `notifier.py`:
+- Primary: `TELEGRAM_CHAT_ID` (your personal chat)
+- Extra: `TELEGRAM_EXTRA_CHAT_IDS` (comma-separated, e.g. secondary chat)
+
+All send functions (scanner, brief, P&L report, strategies) use `notifier.py`.
+
+---
 
 The system is designed to use the right strategy for each signal type:
 
