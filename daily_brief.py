@@ -522,18 +522,27 @@ DATA:
 
 WEEKEND_INSTRUCTION = """WEEKEND BRIEF — markets closed, focus on what matters for Monday:
 
-STEP 1 — MACRO NEWS: What geopolitical/economic events happened this weekend? (from MACRO NEWS section)
-STEP 2 — FRIDAY'S POSITIONING: What large OI positions were built Friday? (from GAMMA LEVELS and HISTORICAL CONTEXT)
-STEP 3 — EARNINGS THIS WEEK: Which stocks report earnings next week? How might flow signals be affected?
-STEP 4 — MONDAY SETUP: Based on weekend news + Friday's positioning, what are the highest-probability setups for Monday open?
+CRITICAL RULE: On weekends, MACRO NEWS overrides flow signals.
+Flow signals were placed BEFORE the weekend news. If Hormuz closed, war escalated, 
+or major policy changed AFTER the flow signals — the macro event takes priority.
 
-Write 4 short paragraphs:
-  Para 1: Weekend macro events and their market impact
-  Para 2: Key positions built Friday (OI data) — what are institutions positioned for?
-  Para 3: Earnings this week — which of your holdings report?
-  Para 4: Monday open setup — what to watch, what direction, what levels
+STEP 1 — MACRO NEWS FIRST: What happened this weekend? (MACRO NEWS section)
+  - Is it bullish or bearish for markets?
+  - Which sectors are directly affected? (oil/energy, defence, airlines, gold)
+  
+STEP 2 — DOES FLOW CONFIRM OR CONFLICT?
+  - Were large put positions opened Friday? (OI data = institutions hedging for this)
+  - Were call sweeps from BEFORE the weekend news? (may be stale)
+  
+STEP 3 — EARNINGS THIS WEEK: Which stocks report? Any in your watchlist?
 
-Be specific. Cite exact strikes and premiums from the data."""
+STEP 4 — MONDAY SETUP (be decisive):
+  - What direction will market open? (based on macro, not stale flow)
+  - Which sectors benefit/suffer?
+  - Key price levels to watch (from GAMMA LEVELS)
+  - One specific trade setup
+
+Write 4 short paragraphs. Be direct. "Hormuz closed = oil up, market down Monday" not "mixed signals"."""
 
 MORNING_INSTRUCTION = """MORNING BRIEF — reason step by step, then write the brief:
 
