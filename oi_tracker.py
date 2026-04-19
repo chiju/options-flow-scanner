@@ -21,7 +21,7 @@ OI_HEADERS = ["date", "symbol", "expiry", "strike", "type",
               "oi", "oi_change", "vol", "price", "signal"]
 
 # ATM zone: ±15% of current price
-ATM_RANGE = 0.15
+ATM_RANGE = 0.20  # ±20% of current price (catches more institutional strikes)
 # Top N strikes by OI per symbol per expiry
 TOP_N = 5
 
@@ -63,18 +63,18 @@ def fetch_oi(symbol: str) -> list:
         if not exps:
             return []
 
-        # Pick nearest weekly (>today) + nearest monthly
+        # Pick nearest weekly + 3 monthly expiries (professional standard: 4 expiries)
         today = datetime.now().date()
         selected_exps = []
-        for exp in exps[:8]:
+        for exp in exps[:12]:
             exp_date = datetime.strptime(exp, "%Y-%m-%d").date()
             dte = (exp_date - today).days
             if dte <= 0:
-                continue  # skip expired or today's expiry
+                continue
             if dte <= 7 and not any((datetime.strptime(e, "%Y-%m-%d").date() - today).days <= 7 for e in selected_exps):
-                selected_exps.append(exp)  # nearest weekly (future only)
-            elif 8 <= dte <= 45 and len(selected_exps) < 2:
-                selected_exps.append(exp)  # nearest monthly
+                selected_exps.append(exp)  # nearest weekly
+            elif 8 <= dte <= 90 and len(selected_exps) < 4:
+                selected_exps.append(exp)  # up to 3 monthly (covers 0-90 DTE)
 
         rows = []
         lower = price * (1 - ATM_RANGE)
