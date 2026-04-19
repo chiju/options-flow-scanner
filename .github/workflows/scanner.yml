@@ -90,6 +90,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
 
   oi-tracker:
     runs-on: ubuntu-latest

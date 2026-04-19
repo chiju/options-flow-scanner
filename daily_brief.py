@@ -57,6 +57,67 @@ def _finbert_score(text: str) -> tuple[str, float]:
 
 
 # ── Reddit Sentiment (free, no API key) ───────────────────────────────────────
+def _finnhub_key(): return os.environ.get("FINNHUB_API_KEY", "")
+
+
+def fetch_finnhub_news(symbols: list, hours_back: int = 18) -> dict:
+    """Fetch company news from Finnhub (free, 24/7 including weekends)."""
+    if not _finnhub_key():
+        return {}
+    try:
+        import time
+        result = {}
+        date_from = (datetime.now() - timedelta(hours=hours_back)).strftime("%Y-%m-%d")
+        date_to   = datetime.now().strftime("%Y-%m-%d")
+        for sym in symbols[:15]:
+            r = requests.get(
+                "https://finnhub.io/api/v1/company-news",
+                params={"symbol": sym, "from": date_from, "to": date_to, "token": _finnhub_key()},
+                timeout=8
+            )
+            if not r.ok: continue
+            for a in r.json()[:5]:
+                headline = a.get("headline", "")
+                if not headline: continue
+                label, _ = _finbert_score(headline)
+                if sym not in result:
+                    result[sym] = {"positive": 0, "negative": 0, "neutral": 0, "headlines": []}
+                result[sym][label] += 1
+                if len(result[sym]["headlines"]) < 2:
+                    emoji = "🟢" if label=="positive" else "🔴" if label=="negative" else "⚪"
+                    result[sym]["headlines"].append(f"{emoji} {headline[:80]}")
+            time.sleep(0.1)
+        return result
+    except Exception as e:
+        print(f"  Finnhub error: {e}")
+        return {}
+
+
+def fetch_finnhub_macro() -> list:
+    """Fetch general market/macro news from Finnhub (Hormuz, Fed, oil, war etc.) — works weekends."""
+    if not _finnhub_key():
+        return []
+    try:
+        r = requests.get(
+            "https://finnhub.io/api/v1/news",
+            params={"category": "general", "token": _finnhub_key()},
+            timeout=8
+        )
+        if not r.ok: return []
+        keywords = ["hormuz","iran","oil","war","fed","inflation","tariff","china","opec","rate","gdp","crude","ceasefire"]
+        macro = []
+        for a in r.json()[:30]:
+            headline = a.get("headline", "").lower()
+            if any(k in headline for k in keywords):
+                label, _ = _finbert_score(a["headline"])
+                emoji = "🟢" if label=="positive" else "🔴" if label=="negative" else "⚪"
+                macro.append(f"{emoji} {a['headline'][:80]}")
+        return macro[:6]
+    except Exception as e:
+        print(f"  Finnhub macro error: {e}")
+        return []
+
+
 def fetch_macro_news(hours_back: int = 18) -> list:
     """Fetch untagged macro/geopolitical news from Alpaca (no symbol filter)."""
     if not _alpaca_key():
@@ -235,8 +296,22 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
 
     top_syms = [row[1] for row in tracker[1:21] if len(row) > 1]
     news   = fetch_news_sentiment(top_syms, hours_back)
+    # Merge Finnhub news (fills gaps, works weekends)
+    finnhub_news = fetch_finnhub_news(top_syms, hours_back)
+    for sym, fn in finnhub_news.items():
+        if sym not in news:
+            news[sym] = fn
+        else:
+            # Merge: add counts and headlines
+            news[sym]["positive"] += fn["positive"]
+            news[sym]["negative"] += fn["negative"]
+            for h in fn["headlines"]:
+                if h not in news[sym]["headlines"]:
+                    news[sym]["headlines"].append(h)
     reddit = fetch_reddit_sentiment(top_syms)
-    macro  = fetch_macro_news(hours_back)
+    # Merge macro news from both Alpaca and Finnhub
+    macro  = fetch_macro_news(hours_back) + fetch_finnhub_macro()
+    macro  = list(dict.fromkeys(macro))[:6]  # dedup, cap at 6
 
     # Gamma levels — nearest expiry per symbol
     gamma = {}
