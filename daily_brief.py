@@ -344,9 +344,11 @@ def fetch_brief_data(hours_back: int = 24) -> dict:
                 if h not in news[sym]["headlines"]:
                     news[sym]["headlines"].append(h)
     reddit = fetch_reddit_sentiment(top_syms)
-    # Merge macro news from both Alpaca and Finnhub
-    macro  = fetch_macro_news(hours_back) + fetch_finnhub_macro()
-    macro  = list(dict.fromkeys(macro))[:6]  # dedup, cap at 6
+    # Merge macro news: Finnhub FIRST (more current), then Alpaca
+    finnhub_macro = fetch_finnhub_macro()
+    alpaca_macro  = fetch_macro_news(hours_back)
+    macro = finnhub_macro + [m for m in alpaca_macro if m not in finnhub_macro]
+    macro = macro[:8]  # cap at 8
 
     # Gamma levels — nearest expiry per symbol
     gamma = {}
