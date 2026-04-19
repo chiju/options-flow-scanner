@@ -286,7 +286,8 @@ def detect_signal_events(svc, sid: str, results: list) -> list:
     r2 = svc.spreadsheets().values().get(
         spreadsheetId=sid, range="UNUSUAL_ALERTS!A:F"
     ).execute()
-    alert_rows = r2.get("values", [])[1:]
+    # Only use last 500 rows (3 days of data, ~150 alerts/day)
+    alert_rows = r2.get("values", [])[1:][-500:]
     today = datetime.now().strftime("%Y-%m-%d")
     three_days_ago = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 
@@ -408,7 +409,7 @@ def get_last_scan(svc, sid) -> dict:
     r = svc.spreadsheets().values().get(
         spreadsheetId=sid, range="UNUSUAL_ALERTS!A:F"
     ).execute()
-    rows = r.get("values", [])[1:]  # skip header
+    rows = r.get("values", [])[1:][-100:]  # only last 100 rows needed
     if rows:
         last_ts = rows[-1][0] if rows else None
         for row in reversed(rows):
