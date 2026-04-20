@@ -386,11 +386,8 @@ def sector_rotation_signal(results: list) -> str:
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 def send_telegram(text: str):
-def send_telegram(text: str):
     from notifier import send as _send
     _send(text)
-        except Exception as e:
-            print(f"Telegram error: {e}")
 
 
 # ── Confluence Score ──────────────────────────────────────────────────────────
