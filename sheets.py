@@ -45,7 +45,7 @@ SYMBOL_TYPES = {
     "CRWD":"Stock","PANW":"Stock","ZS":"Stock",
     "AAPL":"Stock","GOOGL":"Stock","MSFT":"Stock","NVDA":"Stock",
     "AMZN":"Stock","META":"Stock","TSLA":"Stock","AMD":"Stock",
-    "COIN":"Stock","MSTR":"Stock","HOOD":"Stock","SMCI":"Stock","ARM":"Stock","SNOW":"Stock",
+    "COIN":"Stock","MSTR":"Stock","HOOD":"Stock","SMCI":"Stock","ARM":"Stock","SNOW":"Stock","ASTS":"Stock","NBIS":"Stock",
     "PLTR":"Stock","CRWV":"Stock","IONQ":"Stock","OKLO":"Stock",
     "ACHR":"Stock","DUOL":"Stock","SOFI":"Stock","PYPL":"Stock",
     "PATH":"Stock","JOBY":"Stock","UUUU":"Stock","POET":"Stock",
