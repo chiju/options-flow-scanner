@@ -49,6 +49,7 @@ MIN_PREMIUM       = 25000   # $25k minimum notional
 MAX_DTE           = 45      # days to expiry
 SWEEP_BLOCK_SIZE  = 500     # contracts = institutional block
 IV_SPIKE_THRESH   = 80.0    # IV% on call = urgency
+_alerts_30d: list = []      # populated at scan start for volume baseline
 MIN_ALERT_SCORE   = 7       # only send Telegram if top alert scores >= this
 
 # ── Credentials ───────────────────────────────────────────────────────────────
@@ -91,6 +92,12 @@ def score_alert(entry: dict) -> int:
     if vol_oi and vol_oi >= 10: s += 2   # 10x+ = extremely unusual
     elif vol_oi and vol_oi >= 5: s += 1  # 5x+ = unusual
 
+    # Volume vs 30-day baseline: how unusual is today's volume historically
+    vb = entry.get("vol_vs_baseline")
+    if vb and vb >= 10: s += 3   # 10x+ normal = extremely unusual (informed trading signal)
+    elif vb and vb >= 5: s += 2  # 5x+ normal = very unusual
+    elif vb and vb >= 3: s += 1  # 3x+ normal = unusual
+
     dte = entry.get("dte", 99)
     if dte <= 7:    s += 2
     elif dte <= 30: s += 1
@@ -101,6 +108,21 @@ def score_alert(entry: dict) -> int:
         elif entry.get("type") == "PUT" and delta > -0.4: s += 1
 
     return min(s, 10)
+
+
+def get_volume_baseline(sym: str, opt_type: str, rows_30d: list) -> float | None:
+    """Avg daily volume for sym/type over last 30 days. Returns None if insufficient data."""
+    from collections import defaultdict
+    daily = defaultdict(int)
+    for row in rows_30d:
+        if len(row) >= 7 and row[1] == sym and row[2] == opt_type:
+            try:
+                daily[row[0][:10]] += int(row[6])
+            except (ValueError, IndexError):
+                pass
+    if len(daily) < 3:
+        return None
+    return sum(daily.values()) / len(daily)
 
 
 def get_iv_rank(sym: str, current_iv: float, svc=None) -> str:
@@ -279,6 +301,11 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
         oi = 0
         vol_oi_ratio = None
 
+        # Volume vs 30-day baseline
+        opt_type = "CALL" if cp == "C" else "PUT"
+        baseline = get_volume_baseline(sym, opt_type, _alerts_30d)
+        vol_vs_baseline = round(volume / baseline, 1) if baseline and baseline > 0 else None
+
         # Mid-price rule: trade at/above mid = buyer aggressive (BUY), below = seller (SELL)
         buy_sell = ""
         if snap.latest_trade and mid > 0:
@@ -295,6 +322,7 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
             "iv": iv_pct, "mid": round(mid, 2),
             "oi": oi, "vol_oi_ratio": vol_oi_ratio,
             "sweep": sweep, "iv_spike": iv_spike, "buy_sell": buy_sell,
+            "vol_vs_baseline": vol_vs_baseline,
         }
         entry["score"] = score_alert(entry)
 
@@ -609,6 +637,19 @@ def run_scan(force_send: bool = False):
 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanning {len(ALL_SYMBOLS)} symbols...")
     client = OptionHistoricalDataClient(api_key=_key(), secret_key=_secret())
+
+    # Fetch last 30 days of alerts once for volume baseline comparison
+    global _alerts_30d
+    try:
+        from sheets import _service, SHEET_ID
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        _r = _service().spreadsheets().values().get(spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:G").execute()
+        _alerts_30d = [row for row in _r.get("values", [])[1:] if row and row[0][:10] >= cutoff]
+        print(f"  📊 Loaded {len(_alerts_30d)} alerts for baseline comparison")
+    except Exception as e:
+        _alerts_30d = []
+        print(f"  ⚠️ Baseline load failed: {e}")
 
     # Dynamically add most active stocks from Screener API
     dynamic = get_dynamic_symbols(top_n=10)
