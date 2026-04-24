@@ -173,14 +173,23 @@ Stock BULLISH    → Bull Put Spread on that stock
 Stock BEARISH    → Bear Call Spread on that stock
 ```
 
-### 5 Core Trading Symbols (live account only)
-| Symbol | Spread width | Max loss | Why |
-|--------|-------------|----------|-----|
-| SPY | $5 wide | $500 | Most liquid, index safety |
-| SOFI | $2 wide | $200 | Cheap, small capital needed |
-| IONQ | $3 wide | $300 | Know the thesis, own it |
-| NVDA | $5 wide | $500 | Highest premium, most liquid |
-| PLTR | $5 wide | $500 | Good premium, own it |
+### Trading Symbol — SPY only (live account)
+
+**Why SPY only:**
+- No single stock risk — 500 companies, one crash doesn't matter
+- No earnings risk, no CEO scandal, no product failure
+- Most liquid options in the world (penny spreads, always fills)
+- Learn one underlying deeply before expanding
+- Pattern recognition comes from repetition on one instrument
+
+**Expansion path (only after consistent profitability):**
+```
+Month 1-6:  SPY only
+Month 7-12: Add QQQ (same mechanics, tech-heavy)
+Year 2+:    Maybe 1 individual stock
+```
+
+Paper account runs multiple stocks for data — live money = SPY only.
 
 ### Position Sizing Rules
 ```
