@@ -153,9 +153,74 @@ Action: SELL BULL PUT SPREAD
 | ARKK CALL $71 Apr17 | 18x | Sell $70/$60 put spread | ARKK +10.1% ✅ |
 | AMZN CALL $205 Apr20 | 10x | Sell $220/$210 put spread | AMZN +4.4% ✅ |
 
----
+## Live Trading Strategy (Starting May 2026)
 
-## Signal Intelligence Layers
+### Capital Split (€2,000/month salary investment)
+```
+€1,200 → Long-term stocks (buy & hold 3-5 years)
+€800   → Options trading capital (Alpaca live account)
+```
+
+### Decision Tree
+```
+Scanner signal → Strategy
+
+SPY/QQQ BULLISH  → Bull Put Spread on SPY
+SPY/QQQ BEARISH  → Bear Call Spread on SPY
+SPY/QQQ SIDEWAYS → Iron Condor on SPY/QQQ
+
+Stock BULLISH    → Bull Put Spread on that stock
+Stock BEARISH    → Bear Call Spread on that stock
+```
+
+### 5 Core Trading Symbols (live account only)
+| Symbol | Spread width | Max loss | Why |
+|--------|-------------|----------|-----|
+| SPY | $5 wide | $500 | Most liquid, index safety |
+| SOFI | $2 wide | $200 | Cheap, small capital needed |
+| IONQ | $3 wide | $300 | Know the thesis, own it |
+| NVDA | $5 wide | $500 | Highest premium, most liquid |
+| PLTR | $5 wide | $500 | Good premium, own it |
+
+### Position Sizing Rules
+```
+Max risk per trade:  10% of total trading capital
+Max open at once:    30% of total trading capital
+Close at:            50% of max profit (→ 81% win rate per Tastytrade research)
+```
+
+### Capital Growth Plan
+```
+Month 1: $870  → 1 trade (SOFI), $200 at risk
+Month 2: $1,670 → 2 trades, $500 at risk
+Month 3: $2,470 → 3 trades, $1,000 at risk
+Month 6: $4,870 → 5 trades (full system)
+Expected monthly income at full size: $150-300
+```
+
+### Emergency Rule
+```
+If market drops 20%+:
+  → Pause options trading
+  → Redirect €800 to averaging NVDA/AMZN/CRWV only
+  → Resume options next month (higher IV = better premiums anyway)
+```
+
+### Why Probability > Risk/Reward
+```
+Bull put spread looks bad on paper:
+  Max profit $150 vs max loss $350 → R/R = 1:2.3 (unfavorable)
+
+But probability makes it work:
+  Sell 30-delta put → 70% probability of profit
+  Manage at 50% profit → 81% actual win rate (Tastytrade research)
+  IV overpricing gives sellers structural edge
+
+91% of options BUYERS lose money (SEBI 2024 study)
+Sellers are on the other side of that trade.
+```
+
+---
 
 ```
 Layer 1: FLOW      → Sweep detected (15-min scan)
