@@ -361,10 +361,23 @@ def run_flow_trader():
         print(f"     Action: {action}")
         print(f"     Price: ${spread['current_price']} | Est credit: ${est_credit:.2f} | Max loss: ${max_loss:.0f}\n")
 
-        # Find expiry (nearest 21-45 DTE)
+        # Find expiry (nearest 21-45 DTE from actual available contracts)
         from datetime import date
-        target_expiry = date.today() + timedelta(days=30)
-        expiry_str = target_expiry.strftime("%Y-%m-%d")
+        target_min = date.today() + timedelta(days=21)
+        target_max = date.today() + timedelta(days=45)
+        try:
+            import requests as _req
+            _h = {"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}
+            _r = _req.get(f"{PAPER_BASE}/v2/options/contracts", headers=_h, params={
+                "underlying_symbols": sym, "type": "put",
+                "expiration_date_gte": target_min.strftime("%Y-%m-%d"),
+                "expiration_date_lte": target_max.strftime("%Y-%m-%d"),
+                "limit": 1
+            })
+            _cs = _r.json().get("option_contracts", [])
+            expiry_str = _cs[0]["expiration_date"] if _cs else (date.today() + timedelta(days=30)).strftime("%Y-%m-%d")
+        except Exception:
+            expiry_str = (date.today() + timedelta(days=30)).strftime("%Y-%m-%d")
 
         trade_rows.append([
             today, sym, "FLOW_TRIGGERED", sig["direction"], sig["score"],
