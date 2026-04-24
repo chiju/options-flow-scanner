@@ -322,6 +322,7 @@ def run_flow_trader():
         return
 
     # Check what's already been traded today (dedup)
+    today = datetime.now().strftime("%Y-%m-%d")
     r_log = svc.spreadsheets().values().get(
         spreadsheetId=SHEET_ID, range="FLOW_TRADE_LOG!A:B"
     ).execute()
@@ -336,7 +337,6 @@ def run_flow_trader():
         return
 
     print(f"  Found {len(signals)} confirmed signal(s):\n")
-    today = datetime.now().strftime("%Y-%m-%d")
     trade_rows = []
 
     for sig in signals[:3]:  # max 3 trades per day
