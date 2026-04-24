@@ -7,6 +7,66 @@
 
 ---
 
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        DATA SOURCES                             │
+│  Alpaca Options API    yfinance    Finnhub    Reddit    Alpaca  │
+│  (47 symbols, chain)  (prices)   (macro news) (WSB)   (news)  │
+└────────────┬───────────────┬──────────┬────────┬───────────────┘
+             │               │          │        │
+             ▼               ▼          ▼        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     EVERY 15 MINUTES                            │
+│                                                                 │
+│  options_flow_scanner.py                                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ Score 1-10   │  │ Vol Baseline │  │  Confluence Engine   │  │
+│  │ premium      │  │ vs 30d avg   │  │  flow + news + GEX   │  │
+│  │ sweep        │  │ 3x → +1pt    │  │  ⭐⭐⭐ = alert       │  │
+│  │ IV + DTE     │  │ 10x → +3pts  │  │                      │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
+│         └─────────────────┴──────────────────────┘             │
+│                            │                                    │
+│              ┌─────────────▼──────────────┐                    │
+│              │     Golden Flow?            │                    │
+│              │  sweep + score≥8 + $1M+    │                    │
+│              └──────┬──────────┬──────────┘                    │
+│                     │          │                                │
+│              ┌──────▼──┐  ┌───▼──────────────────────┐        │
+│              │Telegram │  │  flow_trader.py           │        │
+│              │ Alert   │  │  3-sweep rule → execute   │        │
+│              └─────────┘  │  bull put spread          │        │
+│                           │  CSP paper account        │        │
+│                           └───────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      GOOGLE SHEETS                              │
+│  UNUSUAL_ALERTS │ SYMBOL_TRACKER │ SIGNAL_HISTORY │ FLOW_TRADE  │
+│  GAMMA_LEVELS   │ OI_SNAPSHOT    │ SIGNAL_OUTCOMES│ BRIEF_LOG   │
+└─────────────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    DAILY INTELLIGENCE                           │
+│                                                                 │
+│  Morning Brief (14:00 UTC)      EOD Bundle (22:30 UTC)         │
+│  ┌─────────────────────────┐    ┌──────────────────────────┐   │
+│  │ Finnhub macro news      │    │ OI tracker (yfinance)    │   │
+│  │ FinBERT sentiment       │    │ Gamma levels (GEX)       │   │
+│  │ Reddit WSB buzz         │    │ Signal outcomes          │   │
+│  │ 3-day memory            │    │ Evening brief            │   │
+│  │ GEX regime              │    │ flow_trader exits        │   │
+│  │ Gemini AI → Telegram    │    └──────────────────────────┘   │
+│  └─────────────────────────┘                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Two-Repo System
 
 ```
@@ -155,8 +215,24 @@ Layer 9: STORY     → AI brief (what does it all mean?)
 | +1 | 8–30 DTE |
 | +1 | OTM delta |
 | +1 | IV rank low (buying cheap options) |
+| +3 | Volume ≥ 10× 30-day average (informed trading signal) |
+| +2 | Volume ≥ 5× 30-day average |
+| +1 | Volume ≥ 3× 30-day average |
 
 **Golden Flow** = sweep + score≥8 + premium≥$1M → Telegram alert
+
+---
+
+## Volume Baseline (New — Apr 2026)
+
+Every scan loads the last 30 days of UNUSUAL_ALERTS and computes average daily volume per symbol/type. Current volume is compared against this baseline:
+
+```
+Normal day:  MSFT calls avg 400 contracts
+Today:       MSFT calls = 4,000 contracts → 10× baseline → +3 pts
+```
+
+This catches the exact moment informed money enters — the same methodology used by Unusual Whales and professional flow scanners.
 
 ---
 
@@ -175,9 +251,16 @@ SPY GEX -3.94M this week → moves amplified → Friday was volatile ✅
 
 ## Watchlist (47 Fixed + Dynamic)
 
-| Group | Symbols | Activity this week |
-|-------|---------|-------------------|
-| Index ETFs | SPY, QQQ, IWM | ✅ Active |
+| Group | Symbols |
+|-------|---------|
+| Index ETFs | SPY, QQQ, IWM |
+| Mega cap | AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA |
+| AI/Cloud | PLTR, CRWV, PATH, AI, SNOW |
+| Semis | AMD, ARM, AVGO, QCOM, MU |
+| Fintech | COIN, HOOD, SOFI, PYPL |
+| High vol | AMD, COIN, MSTR, HOOD, SMCI, ARM, SNOW, ASTS, NBIS |
+| Sector ETFs | XLK, XLF, XLE, GLD, TLT, ITA, USO, UUP, XBI |
+| + Dynamic | Top 10 most active from Alpaca screener (changes daily) |
 | Sector ETFs | XLK, XLF, XLE, XLV, GLD, TLT, ITA, USO, UUP, XBI, ARKK | ✅ ARKK 18x swept |
 | Defence | LMT, RTX, NOC, GD | ⚪ Low |
 | Cyber | CRWD, PANW, ZS | ❌ None |
