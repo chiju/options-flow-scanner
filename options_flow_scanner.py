@@ -651,13 +651,28 @@ def run_scan(force_send: bool = False):
         _alerts_30d = []
         print(f"  ⚠️ Baseline load failed: {e}")
 
+    # Use Schwab for real Greeks+OI if available, else Alpaca
+    use_schwab = bool(os.environ.get("SCHWAB_APP_KEY") and
+                      os.path.exists(os.path.expanduser("~/.alpaca/schwab-token.json")))
+    if use_schwab:
+        try:
+            from schwab_scanner import get_schwab_client, scan_symbol_schwab
+            schwab_c = get_schwab_client()
+            print(f"  📡 Using Schwab API (real Greeks + OI)")
+        except Exception as e:
+            use_schwab = False
+            print(f"  ⚠️ Schwab unavailable ({e}), falling back to Alpaca")
+
     # Dynamically add most active stocks from Screener API
     dynamic = get_dynamic_symbols(top_n=10)
     scan_list = ALL_SYMBOLS + dynamic
 
     results = []
     for sym in scan_list:
-        r = scan_symbol(client, sym)
+        if use_schwab:
+            r = scan_symbol_schwab(schwab_c, sym, _alerts_30d)
+        else:
+            r = scan_symbol(client, sym)
         if r:
             results.append(r)
     print()
