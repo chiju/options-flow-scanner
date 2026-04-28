@@ -107,6 +107,19 @@ def score_alert(entry: dict) -> int:
         if entry.get("type") == "CALL" and delta < 0.4:   s += 1
         elif entry.get("type") == "PUT" and delta > -0.4: s += 1
 
+    # Delta-weighted signal: ATM options (delta ~0.5) = directional conviction
+    # Deep ITM (delta ~1.0) = hedge, not directional
+    if delta is not None:
+        abs_delta = abs(delta)
+        if 0.35 <= abs_delta <= 0.65:  s += 2  # ATM = pure directional bet
+        elif abs_delta > 0.85:          s += 0  # deep ITM = likely hedge, no bonus
+
+    # Theta decay signal: high theta = premium decaying fast = good time to sell spreads
+    theta = entry.get("theta")
+    if theta is not None and entry.get("type") == "PUT":
+        abs_theta = abs(theta)
+        if abs_theta >= 0.3:  s += 1  # fast decay = good spread selling opportunity
+
     return min(s, 10)
 
 
@@ -183,6 +196,23 @@ def get_dynamic_symbols(top_n: int = 10) -> list:
 # ── Price Tracking ────────────────────────────────────────────────────────────
 def get_current_prices(symbols: list) -> dict:
     """Fetch latest price for each symbol. Returns {sym: price}."""
+    # Try Schwab first (real-time NBBO), fall back to Alpaca
+    if os.environ.get("SCHWAB_APP_KEY"):
+        try:
+            from schwab_scanner import get_schwab_client
+            sc = get_schwab_client()
+            r = sc.get_quotes(symbols)
+            result = {}
+            for sym, data in r.json().items():
+                qt = data.get("quote", {})
+                bid = qt.get("bidPrice", 0) or 0
+                ask = qt.get("askPrice", 0) or 0
+                last = qt.get("lastPrice", 0) or 0
+                price = (bid + ask) / 2 if bid and ask else last
+                if price: result[sym] = round(price, 2)
+            if result: return result
+        except Exception:
+            pass
     try:
         client = StockHistoricalDataClient(api_key=_key(), secret_key=_secret())
         req = StockLatestQuoteRequest(symbol_or_symbols=symbols)
@@ -195,28 +225,44 @@ def get_current_prices(symbols: list) -> dict:
 
 
 def get_price_changes(symbols: list) -> dict:
-    """Fetch 1d % price change using yfinance (free)."""
+    """Fetch 1d % price change. Uses Schwab if available, else yfinance."""
+    import pytz
+    et_now = datetime.now(pytz.timezone('America/New_York'))
+    et_mins = et_now.hour * 60 + et_now.minute
+    market_open = et_now.weekday() < 5 and 570 <= et_mins < 960
+    suffix = " (live)" if market_open else " (close)"
+
+    # Try Schwab first
+    if os.environ.get("SCHWAB_APP_KEY"):
+        try:
+            from schwab_scanner import get_schwab_client
+            sc = get_schwab_client()
+            r = sc.get_quotes(symbols)
+            result = {}
+            for sym, data in r.json().items():
+                qt = data.get("quote", {})
+                chg = qt.get("netPercentChange")
+                if chg is not None:
+                    chg_pct = round(chg * 100, 2)
+                    result[sym] = chg_pct
+                    result[f"{sym}_display"] = f"{chg_pct:+.2f}%{suffix}"
+            if result: return result
+        except Exception:
+            pass
+
+    # Fall back to yfinance
     try:
         import yfinance as yf
-        from datetime import timezone
         result = {}
         tickers = yf.download(symbols, period="2d", progress=False, auto_adjust=True)
         close = tickers["Close"]
-
-        # Market status using proper timezone
-        import pytz
-        et_now = datetime.now(pytz.timezone('America/New_York'))
-        et_mins = et_now.hour * 60 + et_now.minute
-        market_open = et_now.weekday() < 5 and 570 <= et_mins < 960  # 9:30am-4pm ET, Mon-Fri
-        suffix = " (live)" if market_open else " (close)"
-
         if hasattr(close, "columns"):
             for sym in symbols:
                 try:
                     s = close[sym].dropna()
                     if len(s) >= 2:
                         chg = round((s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100, 2)
-                        result[sym] = chg  # store as float for interpretation logic
+                        result[sym] = chg
                         result[f"{sym}_display"] = f"{chg:+.2f}%{suffix}"
                 except Exception:
                     pass

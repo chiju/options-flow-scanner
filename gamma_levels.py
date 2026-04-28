@@ -128,6 +128,68 @@ def calc_gamma_levels(chain: dict, symbol: str, spot: float) -> list:
     return rows
 
 
+def calc_gamma_levels_schwab(data: dict, symbol: str, spot: float) -> list:
+    """
+    Same as calc_gamma_levels but uses Schwab chain data with REAL OI and gamma.
+    data = r.json() from schwab get_option_chain
+    """
+    from collections import defaultdict
+    today = datetime.now().date()
+    expiry_data = defaultdict(lambda: defaultdict(lambda: {"call_oi": 0, "put_oi": 0, "call_gex": 0.0, "put_gex": 0.0}))
+
+    for cp_key, cp in [("callExpDateMap", "C"), ("putExpDateMap", "P")]:
+        for exp_str, strikes in data.get(cp_key, {}).items():
+            exp_date_str = exp_str.split(":")[0]
+            try:
+                expiry_date = datetime.strptime(exp_date_str, "%Y-%m-%d").date()
+            except Exception:
+                continue
+            for strike_str, contracts in strikes.items():
+                d = contracts[0]
+                strike = float(strike_str)
+                oi     = d.get("openInterest", 0) or 0
+                gamma  = d.get("gamma")
+                if gamma is None or oi == 0:
+                    continue
+                gex = gamma * oi * 100 * (spot ** 2) / 100
+                if cp == "C":
+                    expiry_data[expiry_date][strike]["call_oi"]  += oi
+                    expiry_data[expiry_date][strike]["call_gex"] += gex
+                else:
+                    expiry_data[expiry_date][strike]["put_oi"]   += oi
+                    expiry_data[expiry_date][strike]["put_gex"]  += gex
+
+    rows = []
+    date_str = today.strftime("%Y-%m-%d")
+    for expiry_date, strikes in expiry_data.items():
+        dte = (expiry_date - today).days
+        if dte < 0 or dte > 45 or not strikes:
+            continue
+        strike_list = sorted(strikes.keys())
+
+        # Max pain
+        min_pain, max_pain_strike = float("inf"), None
+        for ts in strike_list:
+            pain = sum(max(0, ts-s)*d["call_oi"] + max(0, s-ts)*d["put_oi"] for s, d in strikes.items())
+            if pain < min_pain:
+                min_pain, max_pain_strike = pain, ts
+
+        call_wall = max(strike_list, key=lambda s: strikes[s]["call_oi"])
+        put_wall  = max(strike_list, key=lambda s: strikes[s]["put_oi"])
+        total_gex = sum(d["call_gex"] - d["put_gex"] for d in strikes.values())
+        total_gex_m = round(total_gex / 1_000_000, 2)
+        gex_regime = "🟢 Positive (pinned)" if total_gex > 0 else "🔴 Negative (trending)"
+
+        if max_pain_strike:
+            rows.append([
+                date_str, symbol, expiry_date.strftime("%Y-%m-%d"), spot,
+                max_pain_strike, call_wall, put_wall,
+                strikes[call_wall]["call_oi"], strikes[put_wall]["put_oi"], dte,
+                total_gex_m, gex_regime
+            ])
+    return rows
+
+
 def run_gamma_levels():
     print(f"[{datetime.now().strftime('%H:%M')}] Running gamma levels...")
     svc = _service()
@@ -153,8 +215,36 @@ def run_gamma_levels():
         secret_key=os.environ.get("ALPACA_SECRET_KEY", "")
     )
 
+    # Use Schwab for real gamma if available
+    use_schwab = bool(os.environ.get("SCHWAB_APP_KEY"))
+    schwab_c = None
+    if use_schwab:
+        try:
+            from schwab_token_store import load_token
+            load_token()
+            from schwab_scanner import get_schwab_client
+            schwab_c = get_schwab_client()
+            print("  📡 Using Schwab gamma (real)")
+        except Exception as e:
+            use_schwab = False
+            print(f"  ⚠️ Schwab unavailable: {e}")
+
     all_rows = []
     cutoff = datetime.now().date() + timedelta(days=45)
+
+    # Use Schwab for real gamma if available
+    use_schwab = bool(os.environ.get("SCHWAB_APP_KEY"))
+    schwab_c = None
+    if use_schwab:
+        try:
+            from schwab_token_store import load_token
+            load_token()
+            from schwab_scanner import get_schwab_client
+            schwab_c = get_schwab_client()
+            print("  📡 Using Schwab gamma (real)")
+        except Exception as e:
+            use_schwab = False
+            print(f"  ⚠️ Schwab unavailable: {e}")
 
     for symbol in GAMMA_SYMBOLS:
         print(f"  {symbol}...", end=" ", flush=True)
@@ -163,12 +253,21 @@ def run_gamma_levels():
             print("no spot")
             continue
         try:
-            chain = client.get_option_chain(OptionChainRequest(
-                underlying_symbol=symbol,
-                expiration_date_gte=datetime.now().date(),
-                expiration_date_lte=cutoff,
-            ))
-            rows = calc_gamma_levels(chain, symbol, spot)
+            if use_schwab and schwab_c:
+                from schwab import client as schwab_client
+                r = schwab_c.get_option_chain(symbol,
+                    contract_type=schwab_client.Client.Options.ContractType.ALL,
+                    strike_count=50, include_underlying_quote=False,
+                    from_date=datetime.now().date(), to_date=cutoff)
+                data = r.json()
+                rows = calc_gamma_levels_schwab(data, symbol, spot)
+            else:
+                chain = client.get_option_chain(OptionChainRequest(
+                    underlying_symbol=symbol,
+                    expiration_date_gte=datetime.now().date(),
+                    expiration_date_lte=cutoff,
+                ))
+                rows = calc_gamma_levels(chain, symbol, spot)
             all_rows.extend(rows)
             print(f"{len(rows)} expiries")
         except Exception as e:
