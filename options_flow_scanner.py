@@ -652,10 +652,11 @@ def run_scan(force_send: bool = False):
         print(f"  ⚠️ Baseline load failed: {e}")
 
     # Use Schwab for real Greeks+OI if available, else Alpaca
-    use_schwab = bool(os.environ.get("SCHWAB_APP_KEY") and
-                      os.path.exists(os.path.expanduser("~/.alpaca/schwab-token.json")))
+    use_schwab = bool(os.environ.get("SCHWAB_APP_KEY"))
     if use_schwab:
         try:
+            from schwab_token_store import load_token, save_token
+            load_token()  # pull latest token from Google Sheets
             from schwab_scanner import get_schwab_client, scan_symbol_schwab
             schwab_c = get_schwab_client()
             print(f"  📡 Using Schwab API (real Greeks + OI)")
@@ -868,3 +869,11 @@ if __name__ == "__main__":
             pass
 
     run_scan(force_send=args.force or args.premarket or args.afterhours)
+
+    # Save refreshed Schwab token back to Google Sheets
+    if os.environ.get("SCHWAB_APP_KEY"):
+        try:
+            from schwab_token_store import save_token
+            save_token()
+        except Exception:
+            pass
