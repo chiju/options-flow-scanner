@@ -51,7 +51,48 @@ def _signal(oi_change: int, price_change: float, opt_type: str = "CALL") -> str:
 
 
 def fetch_oi(symbol: str) -> list:
-    """Fetch top OI contracts for a symbol. Returns list of row dicts."""
+    """Fetch top OI contracts for a symbol. Uses Schwab if available, else yfinance."""
+    # Try Schwab first (real OI, not delayed)
+    if os.environ.get("SCHWAB_APP_KEY"):
+        try:
+            from schwab_token_store import load_token
+            load_token()
+            from schwab_scanner import get_schwab_client
+            from schwab import client as schwab_client
+            sc = get_schwab_client()
+            today = datetime.now().date()
+            cutoff = today + timedelta(days=90)
+            r = sc.get_option_chain(symbol,
+                contract_type=schwab_client.Client.Options.ContractType.ALL,
+                strike_count=20, include_underlying_quote=True,
+                from_date=today, to_date=cutoff)
+            data = r.json()
+            spot = data.get("underlyingPrice", 0) or 0
+            if not spot: raise ValueError("no spot")
+            lower, upper = spot * (1 - ATM_RANGE), spot * (1 + ATM_RANGE)
+            rows = []
+            for cp_key, opt_type in [("callExpDateMap","CALL"),("putExpDateMap","PUT")]:
+                for exp_str, strikes in list(data.get(cp_key,{}).items())[:4]:
+                    exp_date = datetime.strptime(exp_str.split(":")[0], "%Y-%m-%d").date()
+                    dte = (exp_date - today).days
+                    if dte <= 0 or dte > 90: continue
+                    for strike_str, contracts in strikes.items():
+                        strike = float(strike_str)
+                        if not (lower <= strike <= upper): continue
+                        d = contracts[0]
+                        oi_val  = d.get("openInterest", 0) or 0
+                        vol_val = d.get("totalVolume", 0) or 0
+                        if oi_val == 0: continue
+                        rows.append({"symbol": symbol, "expiry": exp_date.strftime("%Y-%m-%d"),
+                                     "strike": strike, "type": opt_type,
+                                     "oi": int(oi_val), "vol": int(vol_val), "price": spot})
+            # Sort by OI, keep top N per expiry/type
+            rows.sort(key=lambda x: x["oi"], reverse=True)
+            return rows[:TOP_N * 8]
+        except Exception as e:
+            pass  # fall through to yfinance
+
+    # Fall back to yfinance
     try:
         ticker = yf.Ticker(symbol)
         info   = ticker.fast_info
@@ -63,7 +104,6 @@ def fetch_oi(symbol: str) -> list:
         if not exps:
             return []
 
-        # Pick nearest weekly + 3 monthly expiries (professional standard: 4 expiries)
         today = datetime.now().date()
         selected_exps = []
         for exp in exps[:12]:
@@ -72,9 +112,9 @@ def fetch_oi(symbol: str) -> list:
             if dte <= 0:
                 continue
             if dte <= 7 and not any((datetime.strptime(e, "%Y-%m-%d").date() - today).days <= 7 for e in selected_exps):
-                selected_exps.append(exp)  # nearest weekly
+                selected_exps.append(exp)
             elif 8 <= dte <= 90 and len(selected_exps) < 4:
-                selected_exps.append(exp)  # up to 3 monthly (covers 0-90 DTE)
+                selected_exps.append(exp)
 
         rows = []
         lower = price * (1 - ATM_RANGE)
@@ -84,17 +124,15 @@ def fetch_oi(symbol: str) -> list:
             chain = ticker.option_chain(exp)
 
             for df, opt_type in [(chain.calls, "CALL"), (chain.puts, "PUT")]:
-                # Filter ATM zone
                 atm = df[(df["strike"] >= lower) & (df["strike"] <= upper)]
                 if atm.empty:
                     continue
-                # Top N by OI
                 top = atm.nlargest(TOP_N, "openInterest")
                 for _, row in top.iterrows():
                     oi_val  = row.get("openInterest")
                     vol_val = row.get("volume")
                     strike  = row.get("strike")
-                    if any(v != v for v in [oi_val, vol_val, strike]):  # NaN check
+                    if any(v != v for v in [oi_val, vol_val, strike]):
                         continue
                     rows.append({
                         "symbol":  symbol,
