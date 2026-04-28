@@ -126,6 +126,11 @@ def get_confirmed_signals(svc, lookback_days: int = 2) -> list:
         if gex_ok: confluence_pts += 1
         if news_ok: confluence_pts += 1
 
+        # IV rank bonus: high IV = fat premium = better spread selling conditions
+        iv_rank_str = contract_details.get(key, [""])[7] if key in contract_details else ""
+        if "High" in str(iv_rank_str):   confluence_pts += 2  # IVR 70+ = ideal
+        elif "Mid" in str(iv_rank_str):  confluence_pts += 1  # IVR 30-70 = ok
+
         # Only require: 3+ sweeps + score≥8 + premium≥$1M
         # GEX and news improve confidence but don't block
         confirmed.append({
