@@ -7,13 +7,43 @@
 
 ---
 
+## What This System Actually Does
+
+**Step by step, every 15 minutes during market hours:**
+
+```
+1. Fetch options chain for 47 symbols (Schwab API → real Greeks/OI, or Alpaca fallback)
+2. Filter: premium > $25K or sweep > 500 contracts
+3. Score each contract 1-10 (premium size + sweep + delta + theta + vol baseline)
+4. Detect: Golden Flow (sweep + score≥8 + $1M+) → Telegram alert
+5. Detect: ⭐⭐⭐ confluence (flow + FinBERT news + GEX all agree) → Telegram alert
+6. Write to Google Sheets: UNUSUAL_ALERTS, SYMBOL_TRACKER, SIGNAL_HISTORY
+```
+
+**Every day at market close:**
+```
+7. OI Tracker: fetch real OI per strike, calculate day-over-day change
+   → "Long Buildup / Short Buildup" signals
+8. Gamma Levels: calculate Max Pain, Call Wall, Put Wall, GEX per symbol
+9. Signal Outcomes: did last week's signals predict price moves?
+10. flow_trader: execute/exit bull put spreads on CSP paper account
+```
+
+**Every morning:**
+```
+11. Morning Brief: Finnhub macro news + FinBERT sentiment + Reddit + GEX regime
+    → AI (Gemini) synthesizes into actionable brief → Telegram
+```
+
+---
+
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        DATA SOURCES                             │
-│  Alpaca Options API    yfinance    Finnhub    Reddit    Alpaca  │
-│  (47 symbols, chain)  (prices)   (macro news) (WSB)   (news)  │
+│  Schwab API (primary)   Alpaca (fallback)   Finnhub   Reddit   │
+│  Real Greeks/OI/prices  Options chain       Macro news  WSB    │
 └────────────┬───────────────┬──────────┬────────┬───────────────┘
              │               │          │        │
              ▼               ▼          ▼        ▼
@@ -25,7 +55,8 @@
 │  │ Score 1-10   │  │ Vol Baseline │  │  Confluence Engine   │  │
 │  │ premium      │  │ vs 30d avg   │  │  flow + news + GEX   │  │
 │  │ sweep        │  │ 3x → +1pt    │  │  ⭐⭐⭐ = alert       │  │
-│  │ IV + DTE     │  │ 10x → +3pts  │  │                      │  │
+│  │ delta (ATM)  │  │ 10x → +3pts  │  │                      │  │
+│  │ theta decay  │  │              │  │                      │  │
 │  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
 │         └─────────────────┴──────────────────────┘             │
 │                            │                                    │
@@ -494,6 +525,60 @@ Capitulation flip (weeks of puts → sudden calls)
 
 ## Related
 [alpaca-news-bot](https://github.com/chiju/alpaca-news-bot) — News digest + Wheel/CSP/Iron-Condor/Bull-Put paper strategies.
+
+---
+
+## Honest Assessment: What We Do vs Professional Tools
+
+### What we do well ✅
+| Feature | Our system | Professional ($75-200/mo) |
+|---------|-----------|--------------------------|
+| Options flow scanning | ✅ Every 15 min | ✅ Real-time (every second) |
+| Sweep detection | ✅ 500+ contracts | ✅ Multi-exchange detection |
+| GEX calculation | ✅ Real gamma (Schwab) | ✅ Same |
+| Greeks | ✅ Real (Schwab) | ✅ Same |
+| News sentiment | ✅ FinBERT + Finnhub | ✅ Similar |
+| AI brief | ✅ Gemini daily | ✅ Similar |
+| Paper trading | ✅ Automated | ❌ Manual |
+| Cost | ✅ Free | ❌ $75-200/mo |
+
+### What we're missing ❌
+| Feature | Gap | Impact |
+|---------|-----|--------|
+| Real-time (every second) | We scan every 15 min | Miss fast moves |
+| Dark pool prints | Not available free | Miss off-exchange accumulation |
+| Opening vs closing tag | Can't detect from chain | Misread some signals |
+| Multi-exchange sweep detection | Single chain snapshot | Miss urgency signal |
+
+### The honest truth
+**Simple is better.** Professional traders who use Unusual Whales ($75/mo) still lose money
+because they chase every signal. Our system's edge is:
+1. **Confluence** — only alert when flow + news + GEX all agree
+2. **Baseline comparison** — only flag when volume is 3x+ above normal
+3. **Automated execution** — no emotion, consistent position sizing
+4. **Signal outcomes tracking** — we know which signals actually worked
+
+The 15-minute delay vs real-time is a real gap for day trading but irrelevant for
+swing trades (3-30 day holds) which is our focus.
+
+---
+
+## Schwab Integration (Apr 2026)
+
+Schwab API provides real-time OPRA data free with a brokerage account:
+- **Real Greeks** (delta, gamma, theta, vega) — not estimated
+- **Real OI** — was always 0 with Alpaca
+- **Real-time prices** — replaces delayed yfinance
+- **Token persistence** — stored in Google Sheets, auto-refreshes
+
+To re-authenticate (needed every ~30 days):
+```bash
+cd ~/stocks/options-flow-scanner
+source ~/.alpaca/options-paper.env
+source .venv/bin/activate
+python schwab_cli.py auth
+python schwab_token_store.py save
+```
 
 ---
 
