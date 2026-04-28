@@ -648,17 +648,21 @@ def has_new_signals(results: list) -> bool:
 
 
 def filter_new_golden_flow(gf: list) -> list:
-    """Only return Golden Flow contracts not yet alerted today."""
-    global _alerted_today
-    today = datetime.now().strftime("%Y-%m-%d")
-    if _alerted_today["date"] != today:
-        _alerted_today = {"date": today, "contracts": set()}
+    """Only return Golden Flow contracts not yet alerted in last 4 hours (sheet-based dedup)."""
+    try:
+        from sheets import _service, SHEET_ID
+        svc = _service()
+        r = svc.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="SIGNAL_HISTORY!A:D").execute()
+        cutoff = (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M")
+        alerted = {row[3] for row in r.get("values",[])[1:]
+                   if len(row)>=4 and row[1]=="GOLDEN_FLOW" and row[0] >= cutoff}
+    except Exception:
+        alerted = set()
     new = []
     for f in gf:
         key = f"{f['_sym']}-{f['type']}-{f['strike']}-{f['expiry']}"
-        if key not in _alerted_today["contracts"]:
+        if key not in alerted:
             new.append(f)
-            _alerted_today["contracts"].add(key)
     return new
 
 
@@ -899,6 +903,17 @@ def run_scan(force_send: bool = False):
 
     if gf:
         lines.append("*⭐ Golden Flow*")
+        # Log to SIGNAL_HISTORY for dedup persistence
+        try:
+            from sheets import _service, SHEET_ID, _append
+            svc = _service()
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            log_rows = [[now_str, "GOLDEN_FLOW", f["_sym"],
+                         f"{f['_sym']}-{f['type']}-{f['strike']}-{f['expiry']}"]
+                        for f in gf[:3]]
+            _append(svc, SHEET_ID, "SIGNAL_HISTORY", log_rows)
+        except Exception:
+            pass
         for f in gf[:3]:
             side = "🐂 CALL" if f["type"] == "CALL" else "🐻 PUT"
             conf = confluence_score(f["_sym"], f["type"], results, gamma_data, news_data)
