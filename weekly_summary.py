@@ -82,6 +82,22 @@ def run_weekly_summary():
             lines.append(f"  `{sym}` — {count} sweeps")
 
     lines.append("\n_Not financial advice._")
+
+    # Check Schwab token expiry — warn if within 7 days
+    try:
+        import json, time, os
+        token_path = os.path.expanduser("~/.alpaca/schwab-token.json")
+        if os.path.exists(token_path):
+            with open(token_path) as f:
+                tok = json.load(f)
+            exp = tok.get("token", {}).get("expires_at", 0)
+            days_left = (exp - time.time()) / 86400
+            if days_left < 7:
+                lines.append(f"\n⚠️ *Schwab token expires in {days_left:.0f} days!*")
+                lines.append("Run locally: `python schwab_token_store.py save`")
+    except Exception:
+        pass
+
     send("\n".join(lines))
     print("✅ Weekly summary sent.")
 
