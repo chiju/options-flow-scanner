@@ -850,6 +850,34 @@ def run_scan(force_send: bool = False):
     except Exception:
         pass
 
+    # ── Divergence Warning: stock up 5%+ but calls being SOLD (informed exit signal) ──
+    if os.environ.get("SCHWAB_APP_KEY"):
+        try:
+            divergence_alerts = []
+            for r in results:
+                sym = r["symbol"]
+                price_chg = price_changes.get(sym, 0)
+                if not isinstance(price_chg, (int, float)) or price_chg < 5:
+                    continue  # only check stocks up 5%+
+                call_sells = [e for e in r["calls"] if e.get("buy_sell") == "SELL" and e.get("premium", 0) > 100_000]
+                call_buys  = [e for e in r["calls"] if e.get("buy_sell") == "BUY"  and e.get("premium", 0) > 100_000]
+                if len(call_sells) >= 2 and len(call_sells) > len(call_buys):
+                    total_sell = sum(e["premium"] for e in call_sells)
+                    total_buy  = sum(e["premium"] for e in call_buys)
+                    if total_sell > total_buy * 1.5:  # sells 50%+ more than buys
+                        divergence_alerts.append(
+                            f"⚠️ *{sym}* up {price_chg:+.1f}% but calls SOLD "
+                            f"(${total_sell//1000}K sell vs ${total_buy//1000}K buy)"
+                        )
+            if divergence_alerts:
+                msg = "*🔍 Divergence Warning — Possible Informed Exit*\n\n"
+                msg += "\n".join(divergence_alerts)
+                msg += "\n\n_Stock rising but smart money selling calls = potential bad news ahead. Consider reducing position._"
+                send_telegram(msg)
+                print(f"  ⚠️ Divergence alerts: {len(divergence_alerts)}")
+        except Exception:
+            pass
+
     # ── Silent mode: only alert on NEW Golden Flow or ⭐⭐⭐ confluence ──────────
     gf = filter_new_golden_flow(golden_flow(results))  # deduped — once per contract per day
     high_conf = []
