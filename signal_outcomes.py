@@ -90,9 +90,9 @@ def run_outcomes():
         ).execute()
 
     existing = svc.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID, range="SIGNAL_OUTCOMES!A:A"
+        spreadsheetId=SHEET_ID, range="SIGNAL_OUTCOMES!A:D"
     ).execute()
-    tracked = {r[0] for r in existing.get("values", [])[1:] if r}
+    tracked = {f"{r[0]}|{r[1]}|{r[2]}|{r[3]}" for r in existing.get("values", [])[1:] if len(r)>=4}
 
     r2 = svc.spreadsheets().values().get(
         spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:P"

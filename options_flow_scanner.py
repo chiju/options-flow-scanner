@@ -811,7 +811,14 @@ def run_scan(force_send: bool = False):
                     row[1] = date  # fill earnings_date
                     snap_rows.append(row)
             if snap_rows:
-                _append(svc, SHEET_ID, "EARNINGS_TRACKER", snap_rows)
+                # Only append if not already logged today (dedup by symbol+date)
+                r_existing = svc.spreadsheets().values().get(
+                    spreadsheetId=SHEET_ID, range="EARNINGS_TRACKER!A:B"
+                ).execute()
+                existing_keys = {f"{row[0]}_{row[1]}" for row in r_existing.get("values",[])[1:] if len(row)>=2}
+                new_rows = [row for row in snap_rows if f"{row[0]}_{row[1]}" not in existing_keys]
+                if new_rows:
+                    _append(svc, SHEET_ID, "EARNINGS_TRACKER", new_rows)
             # Update post-earnings results for symbols that already reported
             for sym in ALL_SYMBOLS:
                 update_post_earnings(svc, SHEET_ID, sym)
