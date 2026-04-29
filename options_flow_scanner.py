@@ -82,7 +82,13 @@ def score_alert(entry: dict) -> int:
     elif p >= 100_000:    s += 1  # $100K+
 
     if entry.get("sweep"):    s += 2
-    if entry.get("iv_spike"): s += 2
+    # IV spike: use IV rank (relative to stock history) not raw IV
+    # IV rank ≥70 = top 30% of that stock's own history = truly elevated
+    iv_rank = entry.get("iv_rank", "")
+    if iv_rank and "High" in str(iv_rank):
+        if entry.get("type") == "CALL": s += 2  # high IV + call = urgency signal
+    elif entry.get("iv_spike"):  # fallback to raw if no iv_rank yet
+        s += 1
 
     # IV Rank: low IV = cheap options = better risk/reward for buyers
     iv_rank = entry.get("iv_rank", "")
@@ -375,6 +381,9 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
         if premium < MIN_PREMIUM:   continue
 
         iv_pct    = round(iv * 100, 1) if iv else None
+        # IV spike: use IV rank (relative) not raw IV (absolute)
+        # Raw 80% is wrong: IONQ always >80%, SPY rarely >80%
+        # Will be updated to iv_rank-based after iv_rank is calculated
         iv_spike  = bool(iv_pct and iv_pct > IV_SPIKE_THRESH and cp == "C")
         # Notional-based sweep: $1M+ in a single block = institutional regardless of stock price
         # Better than flat 500 contracts (500 SOFI = $800K vs 500 SPY = $35M)
