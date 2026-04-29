@@ -34,12 +34,19 @@ if USE_10K_ACCOUNT:
     PAPER_API_SECRET = os.environ.get("ALPACA_FLOW10K_SECRET_KEY", "")
     ACCOUNT_SIZE     = 15_000
     MAX_RISK_PER_TRADE = 750   # 5% of $15K → fits $10 wide spreads
+    # Only trade liquid symbols on real-money account (Tastytrade standard)
+    TRADEABLE_SYMBOLS = {
+        "SPY","QQQ",                              # indexes (best liquidity)
+        "AAPL","NVDA","MSFT","AMZN","META","TSLA", # mega cap
+        "AMD","PLTR","SOFI","COIN",               # high vol, liquid
+    }
     print("[flow_trader] Using $15K realistic account")
 else:
     PAPER_API_KEY    = os.environ.get("ALPACA_CSP_API_KEY", os.environ.get("ALPACA_API_KEY", ""))
     PAPER_API_SECRET = os.environ.get("ALPACA_CSP_SECRET_KEY", os.environ.get("ALPACA_SECRET_KEY", ""))
     ACCOUNT_SIZE     = 101_000
     MAX_RISK_PER_TRADE = 2000  # 2% of $101K
+    TRADEABLE_SYMBOLS = None   # no filter on paper sandbox
 
 TRADE_LOG_HEADERS = [
     "date", "symbol", "signal_type", "direction", "score",
@@ -117,6 +124,11 @@ def get_confirmed_signals(svc, lookback_days: int = 2) -> list:
         premium_match = re.search(r'\$(\d+)K', s[4] if len(s) > 4 else "")
         premium_k = int(premium_match.group(1)) if premium_match else 0
         if premium_k < 1000:  # $1M minimum
+            continue
+
+        # Liquidity filter for $15K account
+        if TRADEABLE_SYMBOLS and sym not in TRADEABLE_SYMBOLS:
+            print(f"  ⏭️ {sym} skipped — not in liquid symbols list")
             continue
 
         # Direction
