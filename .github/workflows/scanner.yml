@@ -169,3 +169,14 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_OPTIONS_SHEET_ID: ${{ secrets.GOOGLE_OPTIONS_SHEET_ID }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      - name: Flow Trader $10K (realistic account)
+        run: python flow_trader.py
+        env:
+          FLOW_TRADER_10K: "true"
+          ALPACA_FLOW10K_API_KEY: ${{ secrets.ALPACA_FLOW10K_API_KEY }}
+          ALPACA_FLOW10K_SECRET_KEY: ${{ secrets.ALPACA_FLOW10K_SECRET_KEY }}
+          ALPACA_CSP_API_KEY: ${{ secrets.ALPACA_CSP_API_KEY }}
+          ALPACA_CSP_SECRET_KEY: ${{ secrets.ALPACA_CSP_SECRET_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_OPTIONS_SHEET_ID: ${{ secrets.GOOGLE_OPTIONS_SHEET_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
