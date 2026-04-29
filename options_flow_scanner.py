@@ -221,7 +221,10 @@ def get_iv_rank(sym: str, current_iv: float, svc=None) -> str:
 def get_dynamic_symbols(top_n: int = 10) -> list:
     """Get most active stocks via Alpaca Screener API — adds to watchlist dynamically."""
     try:
-        screener = ScreenerClient(api_key=_key(), secret_key=_secret())
+        # Screener requires live key (not paper)
+        live_key = os.environ.get("ALPACA_LIVE_API_KEY") or os.environ.get("ALPACA_API_KEY", "")
+        live_secret = os.environ.get("ALPACA_LIVE_SECRET_KEY") or os.environ.get("ALPACA_SECRET_KEY", "")
+        screener = ScreenerClient(api_key=live_key, secret_key=live_secret)
         result = screener.get_most_actives(MostActivesRequest(top=top_n))
         syms = [m.symbol for m in result.most_actives if hasattr(m, "symbol")]
         # Filter out already-tracked symbols and non-optionable (low price)
