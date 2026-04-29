@@ -54,8 +54,8 @@ _alerts_30d: list = []      # populated at scan start for volume baseline
 MIN_ALERT_SCORE   = 7       # only send Telegram if top alert scores >= this
 
 # ── Credentials ───────────────────────────────────────────────────────────────
-def _key():      return os.environ.get("ALPACA_API_KEY", "")
-def _secret():   return os.environ.get("ALPACA_SECRET_KEY", "")
+def _key():    return os.environ.get("ALPACA_CSP_API_KEY") or os.environ.get("ALPACA_API_KEY", "")
+def _secret(): return os.environ.get("ALPACA_CSP_SECRET_KEY") or os.environ.get("ALPACA_SECRET_KEY", "")
 def _tg_token(): return os.environ.get("TELEGRAM_BOT_TOKEN", "")
 def _tg_chat():  return os.environ.get("TELEGRAM_CHAT_ID", "")
 
@@ -718,9 +718,12 @@ def filter_new_golden_flow(gf: list) -> list:
 def is_market_open() -> bool:
     """Check market status via Alpaca clock API."""
     try:
+        # Try CSP key first (always active), fall back to main key
+        key = os.environ.get("ALPACA_CSP_API_KEY") or _key()
+        secret = os.environ.get("ALPACA_CSP_SECRET_KEY") or _secret()
         r = requests.get(
             "https://paper-api.alpaca.markets/v2/clock",
-            headers={"APCA-API-KEY-ID": _key(), "APCA-API-SECRET-KEY": _secret()},
+            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret},
             timeout=5
         )
         return r.json().get("is_open", False)
