@@ -32,9 +32,9 @@ USE_10K_ACCOUNT = os.environ.get("FLOW_TRADER_10K", "false").lower() == "true"
 if USE_10K_ACCOUNT:
     PAPER_API_KEY    = os.environ.get("ALPACA_FLOW10K_API_KEY", "")
     PAPER_API_SECRET = os.environ.get("ALPACA_FLOW10K_SECRET_KEY", "")
-    ACCOUNT_SIZE     = 10_000
-    MAX_RISK_PER_TRADE = 500   # 5% of $10K
-    print("[flow_trader] Using $10K realistic account")
+    ACCOUNT_SIZE     = 15_000
+    MAX_RISK_PER_TRADE = 750   # 5% of $15K → fits $10 wide spreads
+    print("[flow_trader] Using $15K realistic account")
 else:
     PAPER_API_KEY    = os.environ.get("ALPACA_CSP_API_KEY", os.environ.get("ALPACA_API_KEY", ""))
     PAPER_API_SECRET = os.environ.get("ALPACA_CSP_SECRET_KEY", os.environ.get("ALPACA_SECRET_KEY", ""))
