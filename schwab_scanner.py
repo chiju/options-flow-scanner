@@ -88,7 +88,7 @@ def scan_symbol_schwab(c, sym: str, alerts_30d: list = None) -> dict | None:
 
                 vol_oi_ratio = round(volume / oi, 1) if oi > 0 else None
                 iv_spike = bool(iv_pct and iv_pct > IV_SPIKE_THRESH and exp_key == "C")
-                sweep    = volume >= SWEEP_BLOCK_SIZE and exp_key == "C"
+                sweep    = (mid * volume * 100) >= 1_000_000 and exp_key == "C"
                 buy_sell = "BUY" if last >= mid else ("SELL" if last > 0 else "")
 
                 opt_type = "CALL" if exp_key == "C" else "PUT"

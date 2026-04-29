@@ -376,7 +376,10 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
 
         iv_pct    = round(iv * 100, 1) if iv else None
         iv_spike  = bool(iv_pct and iv_pct > IV_SPIKE_THRESH and cp == "C")
-        sweep     = volume >= SWEEP_BLOCK_SIZE and cp == "C"
+        # Notional-based sweep: $1M+ in a single block = institutional regardless of stock price
+        # Better than flat 500 contracts (500 SOFI = $800K vs 500 SPY = $35M)
+        notional  = mid * volume * 100
+        sweep     = notional >= 1_000_000 and cp == "C"
 
         # OI not in Alpaca chain — populated from OI_SNAPSHOT (oi_tracker.py EOD)
         oi = 0
