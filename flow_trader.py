@@ -37,7 +37,8 @@ if USE_10K_ACCOUNT:
     # Only trade liquid symbols on real-money account (Tastytrade standard)
     TRADEABLE_SYMBOLS = {
         "SPY","QQQ",                              # indexes (best liquidity)
-        "AAPL","NVDA","MSFT","AMZN","META","TSLA", # mega cap
+        "AAPL","NVDA","MSFT","AMZN","META","TSLA","GOOGL",  # mega cap
+        "AVGO","NFLX","UBER","CRM",               # new liquid additions
         "AMD","PLTR","SOFI","COIN",               # high vol, liquid
     }
     print("[flow_trader] Using $15K realistic account")

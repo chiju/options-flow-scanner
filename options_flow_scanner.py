@@ -21,7 +21,7 @@ DEFENCE     = ["LMT", "RTX", "NOC", "GD"]
 CYBER       = ["CRWD", "PANW", "ZS"]
 PORTFOLIO   = ["MSFT","NVDA","AMZN","META","TSLA","PLTR","CRWV","IONQ","OKLO",
                "ACHR","DUOL","SOFI","PYPL","PATH","JOBY","UUUU","POET"]
-MEGA_CAPS   = ["AAPL","GOOGL","MSFT","NVDA","AMZN","META","TSLA"]
+MEGA_CAPS   = ["AAPL","GOOGL","MSFT","NVDA","AMZN","META","TSLA","AVGO","NFLX","UBER","CRM"]
 HIGH_VOL    = ["AMD","COIN","MSTR","HOOD","SMCI","ARM","SNOW","ASTS","NBIS","RMBS"]
 SYMBOL_NAMES = {
     # Indexes
@@ -37,6 +37,7 @@ SYMBOL_NAMES = {
     # Mega caps
     "AAPL": "Apple", "GOOGL": "Google", "MSFT": "Microsoft",
     "NVDA": "Nvidia", "AMZN": "Amazon", "META": "Meta", "TSLA": "Tesla",
+    "AVGO": "Broadcom", "NFLX": "Netflix", "UBER": "Uber", "CRM": "Salesforce",
     # High vol
     "AMD": "AMD", "COIN": "Coinbase", "MSTR": "MicroStrategy",
     "HOOD": "Robinhood", "SMCI": "SuperMicro", "ARM": "ARM", "SNOW": "Snowflake", "ASTS": "AST SpaceMobile", "NBIS": "Nebius", "RMBS": "Rambus",
