@@ -108,11 +108,12 @@ def score_alert(entry: dict) -> int:
         elif entry.get("type") == "PUT" and delta > -0.4: s += 1
 
     # Delta-weighted signal: ATM options (delta ~0.5) = directional conviction
-    # Deep ITM (delta ~1.0) = hedge, not directional
+    # Deep ITM (delta ~1.0) = hedge, not directional — cap score
     if delta is not None:
         abs_delta = abs(delta)
-        if 0.35 <= abs_delta <= 0.65:  s += 2  # ATM = pure directional bet
-        elif abs_delta > 0.85:          s += 0  # deep ITM = likely hedge, no bonus
+        if abs_delta > 0.85:
+            return min(s, 4)  # hard cap: deep ITM = hedge, max score 4
+        elif 0.35 <= abs_delta <= 0.65:  s += 2  # ATM = pure directional bet
 
     # Theta decay signal: high theta = premium decaying fast = good time to sell spreads
     theta = entry.get("theta")

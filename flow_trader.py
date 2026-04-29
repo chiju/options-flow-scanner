@@ -116,7 +116,7 @@ def get_confirmed_signals(svc, lookback_days: int = 2) -> list:
         score_match = re.search(r'⭐(\d+)', s[3])
         if score_match:
             score = int(score_match.group(1))
-        if score < 8:
+        if score < 9:  # raised from 8 → 9 (score 9-10 = 100% win rate)
             continue
 
         # Parse premium from value column (col 5: "$2940K")
