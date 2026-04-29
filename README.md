@@ -122,12 +122,12 @@
 | +3 | Premium ≥ $5M | Significant |
 | +2 | Premium ≥ $1M | Meaningful |
 | +1 | Premium ≥ $100K | Minimum threshold |
-| **+3** | **Ascending volume (strong)** | **Unusual Whales #1 signal** |
+| **+3** | **Ascending volume (strong)** | **Unusual Whales #1 signal: "repeat action with ascending size"** |
 | +1 | Ascending volume (weak) | Growing interest |
 | +3 | Volume 10× 30-day baseline | Extremely unusual |
 | +2 | Volume 5× baseline | Very unusual |
 | +1 | Volume 3× baseline | Unusual |
-| +2 | Sweep (≥500 contracts) | Urgency = informed |
+| +2 | **Sweep ($1M+ notional)** | **Institutional urgency — scales by stock price** |
 | +2 | ATM delta (0.35-0.65) | Directional bet, not hedge |
 | +2 | IV spike >80% on calls | Buying urgency |
 | +2 | 0-7 DTE | Event-driven bet |
@@ -135,7 +135,11 @@
 | +2 | IV rank High (≥70) | Expensive = sell premium |
 | +1 | IV rank Low (≤30) | Cheap = buy options |
 | +1 | Theta decay high | Good spread selling timing |
-| **CAP** | **Deep ITM (delta >0.85) → max score 4** | **Hedge, not signal** |
+| **CAP** | **Deep ITM (delta >0.85) → max score 4** | **Hedge, not signal (Unusual Whales confirmed)** |
+
+**Sweep definition:** $1M+ notional in a single block (not flat 500 contracts).
+This scales correctly: SOFI needs 625 contracts, SPY needs only 14 contracts for the same $1M signal.
+Professional standard: TradeAlgo uses $500K+ premium; we use $1M for higher conviction.
 
 **Golden Flow** = score ≥9 + sweep + premium ≥$1M → Telegram alert + trade execution
 
