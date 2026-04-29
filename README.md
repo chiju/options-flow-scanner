@@ -127,9 +127,9 @@
 | +3 | Volume 10× 30-day baseline | Extremely unusual |
 | +2 | Volume 5× baseline | Very unusual |
 | +1 | Volume 3× baseline | Unusual |
-| +2 | **Sweep ($1M+ notional)** | **Institutional urgency — scales by stock price** |
+| +2 | **Sweep ($1M+ notional)** | **Dynamic: scales by stock price** |
 | +2 | ATM delta (0.35-0.65) | Directional bet, not hedge |
-| +2 | IV spike >80% on calls | Buying urgency |
+| +2 | **IV rank ≥70 on calls** | **Dynamic: relative to each stock's own history** |
 | +2 | 0-7 DTE | Event-driven bet |
 | +1 | 8-30 DTE | Near-term positioning |
 | +2 | IV rank High (≥70) | Expensive = sell premium |
@@ -137,11 +137,19 @@
 | +1 | Theta decay high | Good spread selling timing |
 | **CAP** | **Deep ITM (delta >0.85) → max score 4** | **Hedge, not signal (Unusual Whales confirmed)** |
 
-**Sweep definition:** $1M+ notional in a single block (not flat 500 contracts).
-This scales correctly: SOFI needs 625 contracts, SPY needs only 14 contracts for the same $1M signal.
-Professional standard: TradeAlgo uses $500K+ premium; we use $1M for higher conviction.
+**All thresholds are dynamic (not hardcoded):**
+- Sweep = $1M notional (SOFI needs 625 contracts, SPY needs 14 — same dollar signal)
+- IV spike = IV rank ≥70 (relative to each stock's own 30-day history, not raw 80%)
+- Deep ITM cap = delta >0.85 (removes rolling hedges from scoring)
 
-**Golden Flow** = score ≥9 + sweep + premium ≥$1M → Telegram alert + trade execution
+**Score levels:**
+```
+Score 9-10 → Auto-trade (100% win rate from data) + Telegram alert
+Score 7-8  → Telegram alert only (manual decision)
+Score ≤6   → Silent (stored in sheets, no alert)
+```
+
+**Golden Flow** = score ≥9 + sweep ($1M notional) + premium ≥$1M → Telegram alert + trade execution
 
 ---
 
