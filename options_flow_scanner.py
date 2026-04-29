@@ -88,6 +88,12 @@ def score_alert(entry: dict) -> int:
     iv_rank = entry.get("iv_rank", "")
     if iv_rank and "Low" in iv_rank: s += 1  # buying cheap options = better edge
 
+    # Ascending volume: same contract growing in volume across scans = accumulation
+    # Unusual Whales: "repeat action with ascending size" = strongest signal
+    asc = entry.get("ascending_vol")
+    if asc == "strong":  s += 3  # 3+ scans, each bigger than last
+    elif asc == "weak":  s += 1  # 2 scans growing
+
     # Vol/OI ratio: >5x = fresh unusual positioning (not just rolling existing)
     vol_oi = entry.get("vol_oi_ratio")
     if vol_oi and vol_oi >= 10: s += 2   # 10x+ = extremely unusual
@@ -123,6 +129,33 @@ def score_alert(entry: dict) -> int:
         if abs_theta >= 0.3:  s += 1  # fast decay = good spread selling opportunity
 
     return min(s, 10)
+
+
+def get_ascending_volume(contract: str, current_vol: int, rows_30d: list) -> str:
+    """
+    Check if this contract's volume is ascending across recent scans.
+    Uses UNUSUAL_ALERTS as filesystem (Google Sheets).
+    Returns: 'strong' (3+ scans ascending), 'weak' (2 scans), '' (no pattern)
+    """
+    # Find last 3 appearances of this contract in today's alerts
+    from datetime import datetime
+    today = datetime.now().strftime("%Y-%m-%d")
+    contract_rows = [
+        int(row[6]) for row in rows_30d
+        if len(row) > 6 and row[0][:10] == today
+        and len(row) > 1 and row[1] in contract  # match by symbol
+        and len(row) > 3 and row[3] in contract  # match by strike
+        and row[6].isdigit()
+    ]
+    if len(contract_rows) < 2:
+        return ""
+    # Check if ascending (each scan bigger than previous)
+    ascending = all(contract_rows[i] < contract_rows[i+1] for i in range(len(contract_rows)-1))
+    if ascending and len(contract_rows) >= 3:
+        return "strong"
+    elif ascending:
+        return "weak"
+    return ""
 
 
 def get_volume_baseline(sym: str, opt_type: str, rows_30d: list) -> float | None:
@@ -353,6 +386,7 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
         opt_type = "CALL" if cp == "C" else "PUT"
         baseline = get_volume_baseline(sym, opt_type, _alerts_30d)
         vol_vs_baseline = round(volume / baseline, 1) if baseline and baseline > 0 else None
+        ascending_vol = get_ascending_volume(contract_sym, volume, _alerts_30d)
 
         # Mid-price rule: trade at/above mid = buyer aggressive (BUY), below = seller (SELL)
         buy_sell = ""
@@ -371,6 +405,7 @@ def scan_symbol(client: OptionHistoricalDataClient, sym: str) -> dict | None:
             "oi": oi, "vol_oi_ratio": vol_oi_ratio,
             "sweep": sweep, "iv_spike": iv_spike, "buy_sell": buy_sell,
             "vol_vs_baseline": vol_vs_baseline,
+            "ascending_vol": ascending_vol,
         }
         entry["score"] = score_alert(entry)
 

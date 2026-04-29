@@ -94,6 +94,10 @@ def scan_symbol_schwab(c, sym: str, alerts_30d: list = None) -> dict | None:
                 opt_type = "CALL" if exp_key == "C" else "PUT"
                 baseline = get_volume_baseline(sym, opt_type, alerts_30d or [])
                 vol_vs_baseline = round(volume / baseline, 1) if baseline and baseline > 0 else None
+                from options_flow_scanner import get_ascending_volume
+                ascending_vol = get_ascending_volume(
+                    f"{sym}{expiry_date.strftime('%y%m%d')}{exp_key}{int(strike*1000):08d}",
+                    volume, alerts_30d or [])
 
                 entry = {
                     "symbol": sym,
@@ -109,6 +113,7 @@ def scan_symbol_schwab(c, sym: str, alerts_30d: list = None) -> dict | None:
                     "oi": oi, "vol_oi_ratio": vol_oi_ratio,
                     "sweep": sweep, "iv_spike": iv_spike, "buy_sell": buy_sell,
                     "vol_vs_baseline": vol_vs_baseline,
+                    "ascending_vol": ascending_vol,
                 }
                 entry["score"] = score_alert(entry)
 
