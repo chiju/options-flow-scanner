@@ -101,6 +101,29 @@ def run_weekly_summary():
     send("\n".join(lines))
     print("✅ Weekly summary sent.")
 
+    # Cleanup: delete UNUSUAL_ALERTS rows older than 90 days (keep data fresh)
+    try:
+        cutoff = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+        r_all = svc.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:A").execute()
+        all_rows = r_all.get("values", [])
+        # Find rows to keep (header + last 90 days)
+        keep = [all_rows[0]] + [row for row in all_rows[1:] if row and row[0][:10] >= cutoff]
+        deleted = len(all_rows) - len(keep)
+        if deleted > 500:  # only clean if significant
+            # Get full data for kept rows
+            r_full = svc.spreadsheets().values().get(
+                spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:S").execute()
+            full_rows = r_full.get("values", [])
+            keep_full = [full_rows[0]] + [row for row in full_rows[1:] if row and row[0][:10] >= cutoff]
+            svc.spreadsheets().values().clear(spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:S").execute()
+            svc.spreadsheets().values().update(
+                spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A1",
+                valueInputOption="RAW", body={"values": keep_full}).execute()
+            print(f"  🧹 Cleaned {deleted} old rows from UNUSUAL_ALERTS (kept {len(keep_full)-1})")
+    except Exception as e:
+        print(f"  ⚠️ Cleanup error: {e}")
+
 
 if __name__ == "__main__":
     run_weekly_summary()
