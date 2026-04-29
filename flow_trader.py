@@ -151,7 +151,8 @@ def get_confirmed_signals(svc, lookback_days: int = 2) -> list:
         if news_ok: confluence_pts += 1
 
         # IV rank bonus: high IV = fat premium = better spread selling conditions
-        iv_rank_str = contract_details.get(key, [""])[7] if key in contract_details else ""
+        row = contract_details.get(key, [])
+        iv_rank_str = row[7] if len(row) > 7 else ""
         if "High" in str(iv_rank_str):   confluence_pts += 2  # IVR 70+ = ideal
         elif "Mid" in str(iv_rank_str):  confluence_pts += 1  # IVR 30-70 = ok
 
