@@ -30,8 +30,8 @@ DRY_RUN = False  # Paper trading on CSP account
 # Account selection: CSP ($101K) or 10K realistic account
 USE_10K_ACCOUNT = os.environ.get("FLOW_TRADER_10K", "false").lower() == "true"
 if USE_10K_ACCOUNT:
-    PAPER_API_KEY    = os.environ.get("ALPACA_10K_API_KEY", "")
-    PAPER_API_SECRET = os.environ.get("ALPACA_10K_SECRET_KEY", "")
+    PAPER_API_KEY    = os.environ.get("ALPACA_FLOW10K_API_KEY", "")
+    PAPER_API_SECRET = os.environ.get("ALPACA_FLOW10K_SECRET_KEY", "")
     ACCOUNT_SIZE     = 10_000
     MAX_RISK_PER_TRADE = 500   # 5% of $10K
     print("[flow_trader] Using $10K realistic account")
