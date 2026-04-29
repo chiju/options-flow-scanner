@@ -287,7 +287,7 @@ def get_price_changes(symbols: list) -> dict:
                 qt = data.get("quote", {})
                 chg = qt.get("netPercentChange")
                 if chg is not None:
-                    chg_pct = round(chg * 100, 2)
+                    chg_pct = round(float(chg), 2)  # Schwab returns % already (1.35 = 1.35%)
                     result[sym] = chg_pct
                     result[f"{sym}_display"] = f"{chg_pct:+.2f}%{suffix}"
             if result: return result
