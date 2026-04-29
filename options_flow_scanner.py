@@ -46,10 +46,10 @@ SYMBOL_NAMES = {
 ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + SECTOR_ETFS + DEFENCE + CYBER + MEGA_CAPS + HIGH_VOL + PORTFOLIO))
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
-MIN_PREMIUM       = 25000   # $25k minimum notional
-MAX_DTE           = 45      # days to expiry
-SWEEP_BLOCK_SIZE  = 500     # contracts = institutional block
-IV_SPIKE_THRESH   = 80.0    # IV% on call = urgency
+MIN_PREMIUM       = 25000   # $25k minimum notional per contract
+MAX_DTE           = 45      # days to expiry maximum
+SWEEP_BLOCK_SIZE  = 500     # legacy — sweep now uses $1M notional threshold
+IV_SPIKE_THRESH   = 80.0    # legacy — IV spike now uses IV rank (relative per stock)
 _alerts_30d: list = []      # populated at scan start for volume baseline
 MIN_ALERT_SCORE   = 7       # only send Telegram if top alert scores >= this
 
