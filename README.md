@@ -278,6 +278,34 @@ Daily trading journals in `journal/YYYY-MM-DD/SYMBOL_journal.md`
 
 ---
 
-## Disclaimer
+## Options Greeks Reference
+
+| Greek | Measures | Simple explanation | Buyer wants | Seller wants |
+|-------|---------|-------------------|------------|-------------|
+| **Delta** | Stock price sensitivity | "If stock moves $1, option moves this much" | High (0.5+) | Low |
+| **Gamma** | Delta acceleration | "How fast delta is changing" | High near expiry | Low (dangerous) |
+| **Theta** | Time decay per day | "I lose this much every day just from time passing" | Low | High (collect daily) |
+| **Vega** | IV sensitivity | "I change this much per 1% IV move" | High IV | Low IV (after earnings) |
+
+**Real example (JOBY $9C, stock at $8.70, cost $0.42):**
+```
+Delta 0.456 → stock +$1 → option +$0.46
+Gamma 0.15  → delta goes from 0.456 → 0.606 after $1 move
+Theta -0.05 → option loses $0.05 every day
+Vega  0.01  → option gains $0.01 per 1% IV increase
+```
+
+**Key rules:**
+```
+Delta 0.5  = ATM (at the money) — directional bet
+Delta 0.8+ = deep ITM — acts like stock, likely a hedge
+Delta 0.2  = OTM — lottery ticket, needs big move
+
+Theta works FOR sellers, AGAINST buyers
+Vega: buy before earnings (IV rising), sell after (IV crushes)
+Gamma spikes near expiry — dangerous for sellers in last hour
+```
+
+---
 Educational and research purposes only. Options trading involves significant risk.
 Past flow patterns do not guarantee future price movements. Not financial advice.
