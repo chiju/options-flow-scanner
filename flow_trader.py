@@ -264,9 +264,9 @@ def check_exits() -> list:
             dte = (exp_date - date.today()).days
 
             reason = None
-            if profit_pct >= 0.70:  # 70% profit = professional standard
-                reason = f"70% profit ({profit_pct:.0%})"
-            elif profit_pct <= -1.5:  # Stop at 1.5× credit (spread at $7.50 on $10 spread)
+            if profit_pct >= 0.50:  # 50% profit = Tastytrade optimal (81% win rate)
+                reason = f"50% profit ({profit_pct:.0%})"
+            elif profit_pct <= -2.0:  # Stop at 2× credit (Tastytrade standard)
                 reason = f"Stop loss ({profit_pct:.0%})"
             elif dte <= 7:
                 reason = f"Near expiry ({dte}d)"
@@ -386,7 +386,7 @@ def run_flow_trader():
         # Estimate credit ($10 wide spread, target $3-5 credit = 30-50% of width)
         est_credit = 3.50  # $3.50 per spread = $350 per contract (conservative)
         max_loss = (spread["spread_width"] - est_credit) * 100  # $650 per contract
-        target = est_credit * 0.70 * 100  # 70% profit target = $245
+        target = est_credit * 0.50 * 100  # 50% profit target = $175 (Tastytrade optimal)
 
         action = f"SELL {spread['type']}: ${spread['sell_strike']}/{spread['buy_strike']}"
         print(f"     Action: {action}")
