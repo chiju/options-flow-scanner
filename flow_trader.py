@@ -54,8 +54,11 @@ TRADE_LOG_HEADERS = [
     "sweep_count", "premium_k", "confluence",
     "action", "strike", "expiry", "spread_width",
     "entry_credit", "max_loss", "target_profit",
-    "status", "dry_run"
+    "status", "dry_run", "account"
 ]
+
+# Tab name depends on account
+TRADE_LOG_TAB = "FLOW_TRADE_LOG_15K" if USE_10K_ACCOUNT else "FLOW_TRADE_LOG"
 
 # ── Signal Analysis ───────────────────────────────────────────────────────────
 
@@ -326,7 +329,7 @@ def run_flow_trader():
     print(f"[{datetime.now().strftime('%H:%M')}] Flow Trader {'(DRY RUN)' if DRY_RUN else '(LIVE)'}")
 
     svc = _service()
-    _ensure_tabs(svc, SHEET_ID, ["FLOW_TRADE_LOG"])
+    _ensure_tabs(svc, SHEET_ID, [TRADE_LOG_TAB])
 
     # Check exits first
     if not DRY_RUN:
@@ -336,11 +339,11 @@ def run_flow_trader():
 
     # Write header if needed
     r = svc.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID, range="FLOW_TRADE_LOG!A1:Q1"
+        spreadsheetId=SHEET_ID, range=f"{TRADE_LOG_TAB}!A1:Q1"
     ).execute()
     if not r.get("values"):
         svc.spreadsheets().values().update(
-            spreadsheetId=SHEET_ID, range="FLOW_TRADE_LOG!A1",
+            spreadsheetId=SHEET_ID, range=f"{TRADE_LOG_TAB}!A1",
             valueInputOption="RAW", body={"values": [TRADE_LOG_HEADERS]}
         ).execute()
 
@@ -355,7 +358,7 @@ def run_flow_trader():
     # Check what's already been traded today (dedup)
     today = datetime.now().strftime("%Y-%m-%d")
     r_log = svc.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID, range="FLOW_TRADE_LOG!A:B"
+        spreadsheetId=SHEET_ID, range=f"{TRADE_LOG_TAB}!A:B"
     ).execute()
     already_traded = {row[1] for row in r_log.get("values", [])[1:]
                       if len(row) >= 2 and row[0] == today}
@@ -427,8 +430,8 @@ def run_flow_trader():
                 print(f"     ✅ Order submitted to paper account")
 
     if trade_rows:
-        _append(svc, SHEET_ID, "FLOW_TRADE_LOG", trade_rows)
-        print(f"  📊 Logged {len(trade_rows)} trade(s) to FLOW_TRADE_LOG sheet")
+        _append(svc, SHEET_ID, TRADE_LOG_TAB, trade_rows)
+        print(f"  📊 Logged {len(trade_rows)} trade(s) to {TRADE_LOG_TAB} sheet")
 
     if DRY_RUN:
         print("\n  ℹ️  DRY RUN — no real orders placed")
