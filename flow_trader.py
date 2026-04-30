@@ -328,6 +328,10 @@ def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> di
 def run_flow_trader():
     print(f"[{datetime.now().strftime('%H:%M')}] Flow Trader {'(DRY RUN)' if DRY_RUN else '(LIVE)'}")
 
+    # Daily limits per account type
+    MAX_TRADES_PER_DAY = 2 if USE_10K_ACCOUNT else 5
+    MAX_OPEN_POSITIONS = 3 if USE_10K_ACCOUNT else 8
+
     svc = _service()
     _ensure_tabs(svc, SHEET_ID, [TRADE_LOG_TAB])
 
@@ -432,6 +436,21 @@ def run_flow_trader():
     if trade_rows:
         _append(svc, SHEET_ID, TRADE_LOG_TAB, trade_rows)
         print(f"  📊 Logged {len(trade_rows)} trade(s) to {TRADE_LOG_TAB} sheet")
+        # Notify on $15K account trades
+        if USE_10K_ACCOUNT:
+            try:
+                from notifier import send
+                acct = requests.get(f"{PAPER_BASE}/v2/account",
+                    headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}).json()
+                val = float(acct.get('portfolio_value',0))
+                lines = [f"*💰 Flow-15K Trade — {datetime.now().strftime('%b %d %H:%M')}*",
+                         f"Account: ${val:,.0f}"]
+                for row in trade_rows:
+                    if len(row) > 8:
+                        lines.append(f"  {row[3]} {row[1]} | {row[8]} | Credit: ${row[12]}")
+                send("\n".join(lines))
+            except Exception:
+                pass
 
     if DRY_RUN:
         print("\n  ℹ️  DRY RUN — no real orders placed")
