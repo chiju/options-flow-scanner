@@ -954,7 +954,17 @@ def run_scan(force_send: bool = False):
 
     # Build focused alert (not the full report)
     now = datetime.now().strftime("%b %d %H:%M")
-    lines = [f"*🚨 High Conviction Alert — {now}*", ""]
+    # Market session label
+    import pytz
+    et = datetime.now(pytz.timezone('America/New_York'))
+    et_mins = et.hour * 60 + et.minute
+    if et.weekday() < 5 and 570 <= et_mins < 960:
+        session = ""  # regular hours — no label needed
+    elif et.weekday() < 5 and (et_mins < 570 or 960 <= et_mins < 1200):
+        session = " 🌅 _Pre/After-Market_"
+    else:
+        session = " 🌙 _After-Hours_"
+    lines = [f"*🚨 High Conviction Alert — {now}*{session}", ""]
 
     if gf:
         lines.append("*⭐ Golden Flow*")
