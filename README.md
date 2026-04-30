@@ -53,75 +53,57 @@
 
 ## System Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          DATA SOURCES                                │
-│                                                                      │
-│  Schwab API          Alpaca API        Finnhub        Reddit/WSB    │
-│  ├─ Real Greeks      ├─ Options chain  ├─ Macro news  └─ Sentiment  │
-│  ├─ Real OI          ├─ Stock quotes   └─ Company news              │
-│  ├─ Real volume      └─ Paper trading                               │
-│  └─ Real-time NBBO                                                  │
-└──────────┬───────────────────┬──────────────┬────────────────────────┘
-           │                   │              │
-           ▼                   ▼              ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    EVERY 15 MINUTES                                  │
-│                                                                      │
-│  options_flow_scanner.py                                             │
-│                                                                      │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────────┐  │
-│  │  SCORING 1-10   │  │  SIGNAL FILTERS  │  │  CONFLUENCE       │  │
-│  │                 │  │                  │  │                   │  │
-│  │ +5 premium≥$20M │  │ ✗ Deep ITM       │  │ Flow direction    │  │
-│  │ +3 ascending vol│  │   (delta>0.85)   │  │ + FinBERT news    │  │
-│  │ +3 vol 10x base │  │   → capped at 4  │  │ + GEX regime      │  │
-│  │ +2 sweep 500+   │  │                  │  │ = ⭐⭐⭐ if all 3  │  │
-│  │ +2 ATM delta    │  │ ✓ ATM (0.35-0.65)│  │   agree           │  │
-│  │ +2 IV spike     │  │ ✓ Ascending vol  │  │                   │  │
-│  │ +2 0-7 DTE      │  │ ✓ Fresh (vol>OI) │  └───────────────────┘  │
-│  │ +2 IV rank high │  │ ✓ BUY not SELL   │                         │
-│  │ +1 theta decay  │  └──────────────────┘                         │
-│  └─────────────────┘                                                │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  SPECIAL ALERTS                                             │    │
-│  │  🔍 Divergence: stock up 5%+ but calls SOLD → exit warning │    │
-│  │  ⭐ Golden Flow: score≥9 + sweep + $1M+ → buy signal       │    │
-│  │  ⭐⭐⭐ Confluence: flow+news+GEX agree → high conviction   │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │
-                               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    GOOGLE SHEETS (filesystem)                        │
-│                                                                      │
-│  UNUSUAL_ALERTS  │ SYMBOL_TRACKER │ SIGNAL_HISTORY │ FLOW_TRADE_LOG │
-│  GAMMA_LEVELS    │ OI_SNAPSHOT    │ SIGNAL_OUTCOMES│ BRIEF_LOG      │
-│  NEWS_SEEN       │ SCHWAB_TOKEN   │ EARNINGS_CAL   │ MY_HOLDINGS    │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │
-                               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    AUTOMATED TRADING                                 │
-│                                                                      │
-│  flow_trader.py                                                      │
-│  ┌─────────────────────────┐  ┌──────────────────────────────────┐  │
-│  │  CSP Account ($101K)    │  │  Flow-15K Account ($15K)         │  │
-│  │  Sandbox testing        │  │  Realistic constraints           │  │
-│  │  Score ≥9 threshold     │  │  Score ≥9 threshold              │  │
-│  │  $10 wide spreads       │  │  $10 wide spreads                │  │
-│  │  $2,000 max risk/trade  │  │  $750 max risk/trade (5%)        │  │
-│  │  All liquid symbols     │  │  11 liquid symbols only          │  │
-│  └─────────────────────────┘  └──────────────────────────────────┘  │
-│                                                                      │
-│  Exit rules (checked every 15 min):                                  │
-│    70% profit → close early (lock in gains)                         │
-│    1.5× stop  → close (limit loss)                                  │
-│    7 DTE      → close (avoid gamma risk)                            │
-└──────────────────────────────────────────────────────────────────────┘
-```
+```mermaid
+flowchart TD
+    subgraph Sources["📡 Data Sources"]
+        S1["Schwab API\nReal Greeks + OI"]
+        S2["Alpaca API\nFallback"]
+        S3["Finnhub\nMacro News"]
+        S4["Reddit\nSentiment"]
+    end
 
+    subgraph Scanner["🔍 Scanner — Every 15 min (4am-8pm ET)"]
+        SC1["Fetch 54 symbols"]
+        SC2["Score 1-10\npremium + sweep + delta\nascending vol + IV rank"]
+        SC3{"Score ≥ 9?"}
+        SC4["Divergence Check\nstock up + calls SOLD"]
+    end
+
+    subgraph Alerts["🚨 Alerts → Telegram"]
+        A1["⭐ Golden Flow\nscore≥9 + $1M notional\n🌅 Pre-Market / 🌆 After-Hours labels"]
+        A2["⭐⭐⭐ Confluence\nflow + news + GEX"]
+        A3["🔍 Divergence Warning\ninformed exit signal"]
+    end
+
+    subgraph Storage["📊 Google Sheets — Filesystem"]
+        G1["UNUSUAL_ALERTS"]
+        G2["SYMBOL_TRACKER"]
+        G3["SIGNAL_HISTORY"]
+        G4["FLOW_TRADE_LOG"]
+        G5["GAMMA_LEVELS + GEX"]
+    end
+
+    subgraph Trading["🤖 Automated Trading"]
+        T1["CSP Account $101K\nSandbox"]
+        T2["Flow-15K $15K\nRealistic"]
+        T3["Bull put spreads\n$10 wide, 70% target"]
+    end
+
+    S1 & S2 --> SC1
+    S3 & S4 --> SC2
+    SC1 --> SC2
+    SC2 --> SC3
+    SC2 --> SC4
+    SC3 -->|Yes| A1
+    SC3 -->|No| G1
+    SC4 --> A3
+    A1 --> G3
+    A1 --> T1 & T2
+    A2 --> Alerts
+    SC2 --> G1 & G2
+    T1 & T2 --> T3
+    T3 --> G4
+```
 ---
 
 ## Scoring System (1-10)
