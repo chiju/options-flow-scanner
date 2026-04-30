@@ -136,5 +136,81 @@ MSFT P/C 0.46 → -3.1% ❌ (bullish signal, missed)
 | OKLO | May 12 | — | — | Check closer |
 
 ---
-*Documented: April 30, 2026*
-*Key lesson: P/C < 0.5 before earnings = buy ATM call with 5% of account*
+
+## CORRECTION: What Professionals Actually Do
+
+**After researching Option Pit, Tastytrade, Schwab, CBOE market makers:**
+
+> *"Smart traders WAIT until AFTER earnings. You can pick the right direction, the stock can go up, and still lose — thanks to IV crush."* — Option Pit (former CBOE market maker)
+
+### The 3 Professional Approaches:
+
+**1. SELL premium BEFORE earnings (Tastytrade — most common)**
+```
+Sell iron condor or strangle 1-2 weeks before
+Collect inflated IV premium
+Close after earnings when IV crushes 30-50%
+Win rate: ~70%
+```
+
+**2. BUY after earnings announcement (Option Pit — safest)**
+```
+Wait for earnings reaction (10pm ET)
+Buy calls/stock AFTER announcement in after-hours
+IV is now low (crushed)
+Trade the post-earnings drift
+This is what we should have done with GOOGL
+```
+
+**3. Calendar spread (CBOE market maker — advanced)**
+```
+Buy longer-dated option (low IV)
+Sell shorter-dated option (high IV before earnings)
+Profit from IV crush on short leg
+```
+
+### Why "Buy before earnings" is risky:
+```
+GOOGL $350C cost $4 yesterday (IV 100%)
+After earnings, IV crushed from 100% → 40%
+Stock went up $25 but option only went to $26
+IV crush ate $3 of the gain
+
+If GOOGL only moved +3% (not +7%):
+  Stock: $349 → $360
+  Option: $4 → $3 (LOSS even though direction correct!)
+  IV crush killed the trade
+```
+
+### The correct GOOGL trade was:
+```
+AFTER earnings announcement (10pm ET):
+  GOOGL at $375 in after-hours
+  Buy $375C May 1 at ~$5 (IV now low)
+  Today open: GOOGL at $375, call worth $8-10
+  Return: +60-100% with MUCH less risk
+  
+OR: Buy GOOGL stock directly in after-hours
+  No IV risk, pure directional
+```
+
+### Updated Earnings Playbook:
+```
+BEFORE earnings:
+  → SELL iron condor (collect inflated IV)
+  → Win 70% of the time
+
+AFTER earnings beat (in after-hours):
+  → BUY calls or stock
+  → IV is low, trade the continuation
+  → Win 60-65%
+
+NEVER:
+  → Buy calls right before earnings
+  → You're paying maximum IV
+  → Even correct direction can lose
+```
+
+---
+*Updated: April 30, 2026 — after researching Option Pit, Tastytrade, Schwab*
+
