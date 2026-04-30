@@ -9,7 +9,18 @@
 
 ## What This System Actually Does
 
-**Every 15 minutes during market hours (13:00-21:00 UTC):**
+**Every 15 minutes during extended hours (8:00-00:00 UTC / 4am-8pm ET):**
+```
+1. Fetch options chain for 54 symbols
+   → Schwab API (real Greeks/OI/volume) or Alpaca fallback
+2. Filter: premium > $25K or sweep ($1M notional)
+3. Score each contract 1-10 (see scoring table below)
+4. Detect divergence: stock up 5%+ but calls being SOLD → exit warning
+5. Detect Golden Flow: sweep + score≥9 + $1M+ → Telegram alert
+   Session labels: 🌅 Pre-Market | (none) Regular | 🌆 After-Hours
+6. Detect ⭐⭐⭐ confluence: flow + news + GEX all agree → Telegram alert
+7. Write to Google Sheets (our filesystem)
+```
 ```
 1. Fetch options chain for 54 symbols
    → Schwab API (real Greeks/OI/volume) or Alpaca fallback
