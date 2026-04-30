@@ -284,26 +284,58 @@ Daily trading journals in `journal/YYYY-MM-DD/SYMBOL_journal.md`
 |-------|---------|-------------------|------------|-------------|
 | **Delta** | Stock price sensitivity | "If stock moves $1, option moves this much" | High (0.5+) | Low |
 | **Gamma** | Delta acceleration | "How fast delta is changing" | High near expiry | Low (dangerous) |
-| **Theta** | Time decay per day | "I lose this much every day just from time passing" | Low | High (collect daily) |
-| **Vega** | IV sensitivity | "I change this much per 1% IV move" | High IV | Low IV (after earnings) |
+| **Theta** | Time decay per day | "I lose this much every day just from time passing" | Low | **High (collect daily)** |
+| **Vega** | IV sensitivity | "I change this much per 1% IV move" | High IV | **Low IV (after earnings)** |
 
-**Real example (JOBY $9C, stock at $8.70, cost $0.42):**
+**Greeks change by strike price (JOBY at $8.70):**
 ```
-Delta 0.456 → stock +$1 → option +$0.46
-Gamma 0.15  → delta goes from 0.456 → 0.606 after $1 move
-Theta -0.05 → option loses $0.05 every day
-Vega  0.01  → option gains $0.01 per 1% IV increase
+Strike  Type    Delta   Gamma   Theta   Vega    Who benefits
+$8C     ITM     0.66    0.20    -0.08   0.01    Buyer (safer, expensive)
+$9C     ATM     0.46    0.25    -0.05   0.01    Both (most sensitive)
+$10C    OTM     0.14    0.10    -0.02   0.005   Buyer (cheap, lottery)
 ```
 
-**Key rules:**
+**The pattern:**
 ```
-Delta 0.5  = ATM (at the money) — directional bet
-Delta 0.8+ = deep ITM — acts like stock, likely a hedge
-Delta 0.2  = OTM — lottery ticket, needs big move
+Delta:  increases going ITM (0.1 OTM → 0.5 ATM → 0.9 ITM)
+Gamma:  highest at ATM (bell curve shape)
+Theta:  highest at ATM (decays fastest)
+Vega:   highest at ATM (most IV sensitive)
+```
 
-Theta works FOR sellers, AGAINST buyers
-Vega: buy before earnings (IV rising), sell after (IV crushes)
-Gamma spikes near expiry — dangerous for sellers in last hour
+**Safer and cheaper — for whom?**
+```
+BUYER perspective:
+  Safer  = ITM (delta 0.8+) — moves like stock, less likely to expire worthless
+  Cheaper = OTM (delta 0.1) — costs less but needs big move to profit
+  Best value = ATM (delta 0.5) — balanced risk/reward
+
+SELLER perspective:
+  Safer  = OTM (delta 0.1) — stock needs to move a lot to hurt you
+  More premium = ATM (delta 0.5) — collects most theta
+  Dangerous = ITM (delta 0.8+) — already losing money
+
+Rule: What's safe for sellers is risky for buyers, and vice versa.
+```
+
+**How we use Greeks in our system:**
+
+| Greek | How we use it | Where |
+|-------|--------------|-------|
+| **Delta** | Score +2 for ATM (0.35-0.65) = directional bet | `score_alert()` |
+| **Delta** | Cap deep ITM (>0.85) at score 4 = hedge filter | `score_alert()` |
+| **Delta** | Buy/sell detection: last price vs mid | `scan_symbol()` |
+| **Gamma** | GEX = gamma × OI × spot² = call/put walls | `gamma_levels.py` |
+| **Theta** | Score +1 for high theta puts = good spread timing | `score_alert()` |
+| **IV/Vega** | IV rank: sell when IVR≥70, buy when IVR≤30 | `score_alert()` |
+| **IV/Vega** | IV spike on calls = urgency signal | `score_alert()` |
+
+**flow_trader uses Greeks to:**
+```
+1. Only trade ATM spreads (delta ~0.2 on short leg = 30-delta)
+2. Exit at 70% profit (theta has done its job)
+3. Close at 7 DTE (gamma risk too high near expiry)
+4. Only enter when IV rank ≥50 (collect fat premium)
 ```
 
 ---
