@@ -350,10 +350,12 @@ def check_exits() -> list:
 def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> dict:
     """Find appropriate strike for spread (10-15% OTM, DTE 21-45)."""
     try:
-        # Use Alpaca for price (already authenticated, faster than yfinance)
+        # Use live Alpaca key for market data (paper keys don't work for data API)
+        live_key    = os.environ.get("ALPACA_LIVE_API_KEY", PAPER_API_KEY)
+        live_secret = os.environ.get("ALPACA_LIVE_SECRET_KEY", PAPER_API_SECRET)
         r = requests.get(
             f"https://data.alpaca.markets/v2/stocks/{symbol}/quotes/latest",
-            headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET},
+            headers={"APCA-API-KEY-ID": live_key, "APCA-API-SECRET-KEY": live_secret},
             params={"feed": "iex"}
         ).json()
         q = r.get("quote", {})
