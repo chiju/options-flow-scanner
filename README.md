@@ -371,3 +371,27 @@ Monthly (21-45 DTE) gives time to recover and theta decays at optimal rate.
 - Sandbox ($101K): tests all signals, no restrictions
 - Realistic ($15K): applies all rules above, mirrors real-world constraints
 
+
+---
+
+## Data Sources
+
+Each source is used for what it does best. Schwab is the primary source for all options data.
+
+| Data | Source | Why |
+|------|--------|-----|
+| Options chain (Greeks, OI, IV, volume) | **Schwab** | Real-time, real Greeks — best quality |
+| GEX / gamma levels | **Schwab** → Alpaca fallback | Real gamma × OI |
+| OI day-over-day snapshots | **Schwab** → yfinance fallback | Real OI, not delayed |
+| Stock quotes / market clock | **Alpaca** | Fast, free, reliable |
+| Historical price bars | **Alpaca** | OHLCV data |
+| News feed | **Alpaca News API** | Real-time news |
+| Earnings calendar | **yfinance** | Only available source (Schwab doesn't provide it) |
+| Trade execution | **Alpaca Paper API** | Schwab has no paper trading |
+
+**What Schwab does NOT provide** (confirmed via schwab-py docs):
+- No earnings calendar → yfinance used instead
+- No news feed → Alpaca News API used instead
+- No paper trading → Alpaca paper accounts used instead
+- No historical options pricing data
+
