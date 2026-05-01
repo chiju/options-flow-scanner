@@ -93,3 +93,58 @@ As account grows from $15K → $20K → $30K, position size scales automatically
 |---------|---------|----------------|
 | Flow-15K (PA3KU3B4THVE) | Realistic constraints, 11 liquid symbols | 5% = $750 |
 | CSP/FlowTrader ($101K) | All 54 symbols, higher capacity | 2% = $2,000 |
+
+---
+
+## Signal DTE vs Trade DTE — Why They're Different
+
+**We detect signals from ANY expiry (0-45 DTE) but only trade monthly (21-45 DTE).**
+
+This is the standard professional approach, confirmed by TradeAlgo, Tastytrade, and Reddit r/options.
+
+### Why signals come from weekly expiry
+
+Institutional traders often use weekly options for:
+- Directional bets (0-7 DTE = maximum leverage, cheap premium)
+- Earnings plays (expire just after the event)
+- Intraday hedging
+
+When we see a $8M sweep on TSLA $385C expiring TODAY, it means:
+*"Smart money is bullish on TSLA right now"* — the signal is about **direction**, not the specific contract.
+
+### Why we trade monthly (21-45 DTE)
+
+From TradeAlgo research (March 2026) and Tastytrade backtesting:
+
+| | Weekly (7 DTE) | Monthly (45 DTE) |
+|--|----------------|-----------------|
+| Win rate (20-delta) | ~71% | ~78% |
+| Theta/gamma ratio | Poor | **Best** |
+| Recovery time if wrong | None | 3-5 weeks |
+| Annual commissions (same capital) | $270 | $62 |
+| Management time | 4-6 hrs/week | 1-2 hrs/week |
+
+**Key finding:** Monthly options at 45 DTE deliver **15× the expected value per trade** vs weeklies (Tastytrade Market Measures research).
+
+### The logic
+
+```
+Weekly signal (0-DTE TSLA call sweep):
+  → Tells us: institutions are bullish on TSLA
+  → We use this as directional confirmation
+
+Monthly trade (TSLA $335/$325P, 30 DTE):
+  → We sell a put spread 12% below current price
+  → Theta decays in our favor every day
+  → 30 days for the stock to stay above our strike
+  → Close at 50% profit (~15 days in)
+```
+
+The weekly signal gives us **conviction on direction**.
+The monthly spread gives us **time + theta** to profit from that direction safely.
+
+### When weekly signals are NOT actionable for us
+
+- 0-DTE signals → informational only, we don't trade same-day
+- Earnings within 30 days → blocked regardless of signal DTE
+- Score < 9 → filtered out regardless of DTE
