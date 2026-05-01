@@ -4,6 +4,23 @@ All bugs encountered, root causes, and fixes. Most recent first.
 
 ---
 
+## 2026-05-01 — GitHub secret ALPACA_CSP_API_KEY stale (401 on orders)
+
+**Symptom:** CSP/FlowTrader account getting 401 "unauthorized" on every order attempt despite local key working fine.
+
+**Root cause:** GitHub secret `ALPACA_CSP_API_KEY` was outdated — different from the local env file value. GitHub Actions uses the secret, not the local file.
+
+**Fix:** Re-sync GitHub secrets from local env:
+```bash
+source ~/.alpaca/options-paper.env
+gh secret set ALPACA_CSP_API_KEY --body "$ALPACA_CSP_API_KEY" --repo chiju/options-flow-scanner
+gh secret set ALPACA_CSP_SECRET_KEY --body "$ALPACA_CSP_SECRET_KEY" --repo chiju/options-flow-scanner
+```
+
+**Rule:** When updating keys locally, always update GitHub secrets too. Local env ≠ GitHub secrets.
+
+---
+
 ## 2026-05-01 — Spread width too wide for cheap stocks
 
 **Symptom:** SOFI $15/$5P spread — $5P filled at $2.13 (should be ~$0.01). Net debit instead of credit.
