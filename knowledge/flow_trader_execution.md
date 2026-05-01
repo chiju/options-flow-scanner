@@ -5,7 +5,12 @@ Runs every 15 minutes via cron-job.org → GitHub Actions.
 ```
 Every 15 minutes
 │
-├── 1. LOAD SIGNALS (Google Sheets → UNUSUAL_ALERTS tab)
+├── 1. MARKET CLOCK CHECK (Alpaca /v2/clock)
+│      Market CLOSED → run exit checks only, skip all entry logic
+│      Market OPEN → proceed with full logic
+│      (prevents pre-market/after-hours phantom trades)
+│
+├── 2. LOAD SIGNALS (Google Sheets → UNUSUAL_ALERTS tab)
 │      Look back 2 days for high-score alerts
 │      Filter: score ≥ 9, option_type = CALL (bullish only)
 │      Filter: premium ≥ $1M, volume ≥ 3x baseline
@@ -33,10 +38,13 @@ Every 15 minutes
 │      Find actual Alpaca options contract matching strike + 21-45 DTE
 │
 ├── 6. EXECUTE SPREAD (2 orders)
+│      Credit price: real bid/ask mid from Alpaca (not hardcoded estimate)
 │      Order 1: BUY protective leg first (long put, lower strike)
 │               → prevents naked short if sell order fails
 │      Order 2: SELL short leg (short put, higher strike)
 │               → collect premium
+│      On failure: removed from log, no Telegram notification sent
+│      Intra-batch dedup: same symbol only trades once per 15-min run
 │      Both: limit orders at mid price
 │
 ├── 7. LOG TO SHEETS (FLOW_TRADE_LOG_15K tab)
