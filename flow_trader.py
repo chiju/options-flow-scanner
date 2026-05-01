@@ -391,6 +391,18 @@ def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> di
 def run_flow_trader():
     print(f"[{datetime.now().strftime('%H:%M')}] Flow Trader {'(DRY RUN)' if DRY_RUN else '(LIVE)'}")
 
+    # ── Market clock check — skip entry if market is closed ────────────────────
+    market_open = True
+    try:
+        clock = requests.get(f"{PAPER_BASE}/v2/clock",
+            headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}).json()
+        market_open = clock.get("is_open", True)
+        if not market_open:
+            next_open = clock.get("next_open", "")[:16]
+            print(f"  Market closed (next open: {next_open}) — skipping new entries, checking exits only")
+    except Exception:
+        pass  # if clock fails, proceed anyway
+
     # Daily limits per account type
     MAX_TRADES_PER_DAY = 2 if USE_10K_ACCOUNT else 5
     MAX_OPEN_POSITIONS = 3 if USE_10K_ACCOUNT else 8
@@ -414,7 +426,10 @@ def run_flow_trader():
             valueInputOption="RAW", body={"values": [TRADE_LOG_HEADERS]}
         ).execute()
 
-    # Get confirmed signals
+    # Get confirmed signals — only enter new trades when market is open
+    if not market_open:
+        return
+
     print("  Analyzing signals...")
     signals = get_confirmed_signals(svc)
 
