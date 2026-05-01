@@ -456,12 +456,23 @@ def run_flow_trader():
             except Exception:
                 pass  # ETFs and symbols without earnings calendar → OK to trade
         signals = [s for s in signals if s["symbol"] not in earnings_blocked]
-        # Notify about earnings-blocked signals
+        # Log + notify earnings-blocked signals
         if earnings_blocked and USE_10K_ACCOUNT:
             try:
                 from notifier import send
                 blocked_list = ", ".join(earnings_blocked)
                 send(f"⏭️ *Flow-15K — Signals Blocked (Earnings)*\n{blocked_list}\nEarnings within 30-day expiry window — skipped per Rule 4")
+            except Exception:
+                pass
+            # Log to sheet
+            try:
+                for sym in earnings_blocked:
+                    sig = next((s for s in signals if s["symbol"] == sym), {})
+                    _append(_service(), SHEET_ID, TRADE_LOG_TAB, [[
+                        datetime.now().strftime("%Y-%m-%d"), sym, "SKIPPED", "EARNINGS_FILTER",
+                        sig.get("score",""), sig.get("sweep_count",""), sig.get("premium_k",""),
+                        "", "", "", "", "", "", "", "", "SKIPPED", "earnings_within_expiry"
+                    ]])
             except Exception:
                 pass
     except Exception:
@@ -526,11 +537,18 @@ def run_flow_trader():
         spread = find_spread_strike(sym, sig["direction"])
         if not spread:
             print(f"     ⚠️ Could not find spread strike\n")
-            # Notify: signal found but couldn't execute
             if USE_10K_ACCOUNT:
                 try:
                     from notifier import send
                     send(f"⚠️ *Flow-15K Signal — No Strike Found*\n{sym} {sig['direction']} | Score:{sig['score']} | ${sig['premium_k']}K\nCould not find 21-45 DTE options contract")
+                except Exception:
+                    pass
+                try:
+                    _append(_service(), SHEET_ID, TRADE_LOG_TAB, [[
+                        datetime.now().strftime("%Y-%m-%d"), sym, "SKIPPED", sig["direction"],
+                        sig.get("score",""), sig.get("sweep_count",""), sig.get("premium_k",""),
+                        "", "", "", "", "", "", "", "", "SKIPPED", "no_strike_found"
+                    ]])
                 except Exception:
                     pass
             continue
