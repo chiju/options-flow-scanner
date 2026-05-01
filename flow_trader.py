@@ -285,6 +285,24 @@ def check_exits() -> list:
                 if r.ok:
                     closed.append(f"✅ Closed {underlying} {p['symbol'][-15:]} | {reason}")
                     print(f"  Closed: {underlying} | {reason}")
+                    # Log result to TRADE_RESULTS sheet
+                    try:
+                        pl_dollar = (entry - current) * 100  # per contract
+                        win = "WIN" if profit_pct >= 0 else "LOSS"
+                        _append(_service(), SHEET_ID, "TRADE_RESULTS", [[
+                            datetime.now().strftime("%Y-%m-%d"),
+                            underlying,
+                            f"${strike:.0f}P",
+                            exp_str,
+                            f"${entry:.2f}",   # credit received
+                            f"${current:.2f}", # closed at
+                            f"{profit_pct:+.0%}",
+                            f"${pl_dollar:+.0f}",
+                            reason,
+                            win,
+                        ]])
+                    except Exception as log_err:
+                        print(f"  Log error: {log_err}")
 
         return closed
     except Exception as e:
@@ -341,7 +359,7 @@ def run_flow_trader():
     MAX_OPEN_POSITIONS = 3 if USE_10K_ACCOUNT else 8
 
     svc = _service()
-    _ensure_tabs(svc, SHEET_ID, [TRADE_LOG_TAB])
+    _ensure_tabs(svc, SHEET_ID, [TRADE_LOG_TAB, "TRADE_RESULTS"])
 
     # Check exits first
     if not DRY_RUN:
