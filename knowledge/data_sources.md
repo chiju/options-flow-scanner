@@ -83,3 +83,24 @@ News?                           → Alpaca News API
 Quotes / price?                 → Alpaca (IEX feed)
 Earnings dates?                 → yfinance (only option)
 ```
+
+---
+
+## Transaction Costs
+
+| Broker | Stocks | Options per contract | Round-trip (1 spread) |
+|--------|--------|---------------------|----------------------|
+| **Alpaca** | $0 | **$0** | $0 |
+| **Schwab** | $0 | **$0.65** | $2.60 (open + close) |
+| Tastytrade | $0 | $1.00 (capped $10) | $4.00 |
+| IBKR | $0 | $0.65 | $2.60 |
+
+**Impact on our strategy:**
+- Paper trading (Alpaca): $0 — no cost distortion in results
+- Live trading (Schwab): $2.60/spread round-trip
+- On $160 net credit: fees = 1.6% of credit (negligible)
+- Real cost is bid-ask spread: $0.05-0.20/contract = $5-20 per leg
+
+**When moving to live:** use Schwab (already have account + API).
+$0.65/contract is industry standard. Tastytrade caps at $10/leg which
+is better for large positions but we trade 1 contract at a time.

@@ -47,11 +47,16 @@ Every 15 minutes
 │      "🎯 Flow-15K: SOLD TSLA $355/$345P spread for $2.10 credit"
 │
 └── 9. MANAGE EXISTING POSITIONS (runs every time regardless of new signals)
-       For each open spread:
-       ├── Profit ≥ 50%? → CLOSE (buy back spread) — 81% win rate
-       ├── Loss ≥ 2x credit? → CLOSE (stop loss)
-       ├── DTE ≤ 7 days? → CLOSE (gamma risk too high)
+       Pairs BOTH legs by (underlying + expiry) to calculate real spread P&L:
+         net_credit  = short_entry - long_entry   (what we collected)
+         spread_cost = short_current - long_current (cost to close now)
+         spread_pl   = net_credit - spread_cost
+       ├── Spread profit ≥ 50%? → CLOSE both legs (81% win rate)
+       ├── Spread loss ≥ 2x credit? → CLOSE both legs (stop loss)
+       ├── DTE ≤ 7 days? → CLOSE both legs (gamma risk too high)
        └── Otherwise → HOLD
+       On close → log to TRADE_RESULTS sheet:
+         date, symbol, spread ($330/$320P), net_credit, close_cost, pl%, pl$, reason, WIN/LOSS
 ```
 
 ## Key Design Decisions
