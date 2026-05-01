@@ -283,6 +283,7 @@ Daily trading journals in `journal/YYYY-MM-DD/SYMBOL_journal.md`
 - [Options Greeks Explained](knowledge/options_greeks_explained.md) — delta, gamma, theta, vega with real trade examples
 - [Data Sources](knowledge/data_sources.md) — why Schwab/Alpaca/yfinance are each used
 - [Flow Trader Execution Flow](knowledge/flow_trader_execution.md) — step-by-step what happens on each run
+- [Scanner Logic](knowledge/scanner_logic.md) — how sweeps/unusual signals are detected, scoring system, 38K contracts/run
 
 ---
 
