@@ -444,14 +444,14 @@ def run_flow_trader():
         import yfinance as yf, logging
         logging.getLogger("yfinance").setLevel(logging.CRITICAL)  # suppress 404 noise
         target_expiry = datetime.now().date() + timedelta(days=30)
-        earnings_blocked = set()
+        earnings_blocked = {}  # sym → earn_date
         for sig in signals:
             sym = sig["symbol"]
             try:
                 cal = yf.Ticker(sym).calendar
                 earn_date = cal.get("Earnings Date", [None])[0] if cal else None
                 if earn_date and earn_date <= target_expiry:
-                    earnings_blocked.add(sym)
+                    earnings_blocked[sym] = earn_date
                     print(f"  ⏭️ {sym} skipped — earnings {earn_date} inside expiry window")
             except Exception:
                 pass  # ETFs and symbols without earnings calendar → OK to trade
@@ -460,13 +460,20 @@ def run_flow_trader():
         if earnings_blocked and USE_10K_ACCOUNT:
             try:
                 from notifier import send
-                blocked_list = ", ".join(earnings_blocked)
-                send(f"⏭️ *Flow-15K — Signals Blocked (Earnings)*\n{blocked_list}\nEarnings within 30-day expiry window — skipped per Rule 4")
+                lines = ["⏭️ *Flow-15K — Signals Blocked (Earnings)*"]
+                for sym, earn_date in earnings_blocked.items():
+                    sig = next((s for s in signals if s["symbol"] == sym), {})
+                    score = sig.get("score", "?")
+                    prem = sig.get("premium_k", "?")
+                    direction = sig.get("direction", "?")
+                    lines.append(f"  {sym} {direction} | Score:{score} | ${prem}K | Earnings:{earn_date}")
+                lines.append("Skipped per Rule 4 (earnings inside expiry window)")
+                send("\n".join(lines))
             except Exception:
                 pass
             # Log to sheet
             try:
-                for sym in earnings_blocked:
+                for sym in earnings_blocked:  # now a dict, iterates keys
                     sig = next((s for s in signals if s["symbol"] == sym), {})
                     _append(_service(), SHEET_ID, TRADE_LOG_TAB, [[
                         datetime.now().strftime("%Y-%m-%d"), sym, "SKIPPED", "EARNINGS_FILTER",
