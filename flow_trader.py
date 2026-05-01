@@ -359,20 +359,22 @@ def run_flow_trader():
         print("  No signals meet all criteria today.")
         return
 
-    # ── Earnings filter: skip symbols with earnings within 7 days (live check) ──
+    # ── Earnings filter: skip if earnings falls within the spread's expiry window ──
+    # Correct rule: earnings_date < expiry_date → binary event inside our trade → skip
     try:
         import yfinance as yf
+        from datetime import timedelta
+        target_expiry = datetime.now().date() + timedelta(days=30)  # our typical expiry
         earnings_blocked = set()
         for sig in signals:
             sym = sig["symbol"]
             try:
                 cal = yf.Ticker(sym).calendar
                 earn_date = cal.get("Earnings Date", [None])[0] if cal else None
-                if earn_date:
+                if earn_date and earn_date <= target_expiry:
                     days_to_earn = (earn_date - datetime.now().date()).days
-                    if 0 <= days_to_earn <= 7:
-                        earnings_blocked.add(sym)
-                        print(f"  ⏭️ {sym} skipped — earnings in {days_to_earn}d (Rule 4)")
+                    earnings_blocked.add(sym)
+                    print(f"  ⏭️ {sym} skipped — earnings {earn_date} inside expiry window")
             except Exception:
                 pass
         signals = [s for s in signals if s["symbol"] not in earnings_blocked]
