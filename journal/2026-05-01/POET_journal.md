@@ -29,38 +29,44 @@ May 1:  $7.35 (slight recovery)
 
 **We saved $3,587 by exiting at $15.25 vs current $7.35 (on 454 shares)**
 
-## Current Options Chain ($7.35)
+## Current Options Chain ($7.36) — May 1
+
+**Put walls (floors):**
 ```
-IV: 130-210% (crisis-level, still elevated)
+May 08 $6P: 7,957 OI  ← massive floor, institutions selling puts = confident $6 holds
+May 15 $7P: 5,386 OI  ← support at $7
+May 22 $6P: 4,500 OI  ← longer-term $6 floor
+May 29 $6P: 3,326 OI  ← $6 floor extends to end of May
+```
+IV: 130% (still elevated = expensive options, good for CSP)
 
-Key OI levels:
-  May 08 $6P: 7,957 OI → put sellers = $6 is the floor
-  May 15 $7P: 5,386 OI → support at $7
-  May 22 $6P: 4,500 OI → longer-term $6 floor
+## Scanner Alerts Today — CALL BUYING (complete reversal from Apr 24)
 
-Resistance: $8 (where it crashed from)
-Support:    $6 (massive put selling wall)
+```
+Apr 30:  $6C May 01  $1.7M sweep  ← buying calls at $6
+Apr 30:  $8C Jul 17  $2.5M sweep  ← long-dated bullish bet (77 days)
+May 01:  $6C May 01  $1.4M → $1.9M → $2.6M → $2.8M → $3.3M (building all day)
 ```
 
-## Current Analyst Sentiment
-- **MarketBeat consensus: SELL, $8 target** (basically at current price)
-- **247WallSt (Apr 30):** "Upside potential exists — LITEON partnership, US redomicile vote June 26"
-- **Motley Fool:** Speculative, no clear buy signal
-- **Legal risk:** Block & Leviton securities fraud investigation ongoing
-- **PFIC tax issue:** US redomicile vote June 26 = potential catalyst
+**This is the OPPOSITE of the Apr 24 signal:**
+```
+Apr 24: Calls SOLD → informed exit → stock crashed -47%  ← we caught this ✅
+May 1:  Calls BOUGHT → accumulation → potential recovery?
+```
 
-## Should We Re-enter?
+The $8C Jul 17 with $2.5M sweep is most significant — 77-day bet POET recovers above $8.
+Someone spent $2.5M on that conviction.
 
-**Not yet.** Conditions for re-entry (CSP):
+## Re-entry Conditions (updated)
 - [ ] Stock stable above $7 for 1 full week (May 1-8)
-- [ ] Legal investigation resolved or no material update
-- [ ] IV still elevated (for good CSP premium)
-- [ ] No new negative news
+- [ ] Legal investigation (Block & Leviton) — no material update
+- [ ] Call buying continues (confirms accumulation)
+- [ ] IV still elevated for good CSP premium
 
 **If conditions met after May 8:**
-- Consider $6P CSP for June expiry
-- Premium ~$0.20-0.30 per contract
-- Risk: stock below $6 = assignment at $6
+- $6P CSP for June expiry
+- Premium ~$0.35-0.40 per contract ($35-40 per contract)
+- Risk: stock below $6 = assignment (7,957 OI of put sellers defending $6)
 
 ## Lesson
 The exit was driven by **judgment + profit satisfaction**, not purely by the signal.
