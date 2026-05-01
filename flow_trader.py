@@ -504,7 +504,21 @@ def run_flow_trader():
             continue
 
         # Estimate credit ($10 wide spread, target $3-5 credit = 30-50% of width)
-        est_credit = 3.50  # $3.50 per spread = $350 per contract (conservative)
+        est_credit = 3.50  # fallback estimate
+        # Try to get real mid price from Alpaca options chain
+        try:
+            _h = {"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}
+            sell_sym = spread.get("sell_contract")
+            buy_sym  = spread.get("buy_contract")
+            if sell_sym and buy_sym:
+                sq = requests.get(f"{PAPER_BASE}/v2/options/contracts/{sell_sym}", headers=_h).json()
+                bq = requests.get(f"{PAPER_BASE}/v2/options/contracts/{buy_sym}", headers=_h).json()
+                sell_mid = (float(sq.get("bid_price",0)) + float(sq.get("ask_price",0))) / 2
+                buy_mid  = (float(bq.get("bid_price",0)) + float(bq.get("ask_price",0))) / 2
+                if sell_mid > 0:
+                    est_credit = round(sell_mid - buy_mid, 2)
+        except Exception:
+            pass
         max_loss = (spread["spread_width"] - est_credit) * 100  # $650 per contract
         target = est_credit * 0.50 * 100  # 50% profit target = $175 (Tastytrade optimal)
 
@@ -545,25 +559,34 @@ def run_flow_trader():
             if executed:
                 trade_rows[-1][15] = "SUBMITTED"
                 print(f"     ✅ Order submitted to paper account")
+            else:
+                trade_rows.pop()  # remove from log if execution failed
+                continue
 
-    if trade_rows:
-        _append(svc, SHEET_ID, TRADE_LOG_TAB, trade_rows)
-        print(f"  📊 Logged {len(trade_rows)} trade(s) to {TRADE_LOG_TAB} sheet")
-        # Notify on $15K account trades
+        already_traded.add(sym)  # prevent same symbol twice in same batch
+
+    executed_rows = [r for r in trade_rows if r[15] == "SUBMITTED"] if not DRY_RUN else trade_rows
+    if executed_rows:
+        _append(svc, SHEET_ID, TRADE_LOG_TAB, executed_rows)
+        print(f"  📊 Logged {len(executed_rows)} trade(s) to {TRADE_LOG_TAB} sheet")
+        # Notify only on actually executed trades
         if USE_10K_ACCOUNT:
             try:
                 from notifier import send
-                acct = requests.get(f"{PAPER_BASE}/v2/account",
+                acct_r = requests.get(f"{PAPER_BASE}/v2/account",
                     headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}).json()
-                val = float(acct.get('portfolio_value',0))
+                val = float(acct_r.get('portfolio_value', 0))
                 lines = [f"*💰 Flow-15K Trade — {datetime.now().strftime('%b %d %H:%M')}*",
                          f"Account: ${val:,.0f}"]
-                for row in trade_rows:
-                    if len(row) > 8:
+                for row in executed_rows:
+                    if len(row) > 12:
                         lines.append(f"  {row[3]} {row[1]} | {row[8]} | Credit: ${row[12]}")
                 send("\n".join(lines))
             except Exception:
                 pass
+    elif trade_rows:
+        _append(svc, SHEET_ID, TRADE_LOG_TAB, trade_rows)
+        print(f"  📊 Logged {len(trade_rows)} trade(s) to {TRADE_LOG_TAB} sheet")
 
     if DRY_RUN:
         print("\n  ℹ️  DRY RUN — no real orders placed")
