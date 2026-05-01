@@ -359,6 +359,44 @@ def run_flow_trader():
         print("  No signals meet all criteria today.")
         return
 
+    # ── Earnings filter: skip symbols with earnings within 7 days (live check) ──
+    try:
+        import yfinance as yf
+        earnings_blocked = set()
+        for sig in signals:
+            sym = sig["symbol"]
+            try:
+                cal = yf.Ticker(sym).calendar
+                earn_date = cal.get("Earnings Date", [None])[0] if cal else None
+                if earn_date:
+                    days_to_earn = (earn_date - datetime.now().date()).days
+                    if 0 <= days_to_earn <= 7:
+                        earnings_blocked.add(sym)
+                        print(f"  ⏭️ {sym} skipped — earnings in {days_to_earn}d (Rule 4)")
+            except Exception:
+                pass
+        signals = [s for s in signals if s["symbol"] not in earnings_blocked]
+    except Exception:
+        pass
+
+    # ── Capital deployed check: max 30% of account in open positions ──
+    try:
+        acct = requests.get(f"{PAPER_BASE}/v2/account",
+            headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}).json()
+        account_value = float(acct.get("portfolio_value", ACCOUNT_SIZE))
+        max_deployed = account_value * 0.30  # 30% max
+        current_deployed = sum(
+            abs(float(p["market_value"])) for p in open_pos
+            if isinstance(open_pos, list) and float(p.get("qty",0)) < 0
+        )
+        if current_deployed >= max_deployed:
+            print(f"  ⏸️ Capital limit: ${current_deployed:,.0f} deployed ≥ 30% (${max_deployed:,.0f})")
+            return
+        remaining_capacity = max_deployed - current_deployed
+        print(f"  💰 Capital: ${current_deployed:,.0f} deployed, ${remaining_capacity:,.0f} available (30% limit)")
+    except Exception:
+        pass
+
     # Check what's already been traded today (dedup) — check log AND open positions
     today = datetime.now().strftime("%Y-%m-%d")
     r_log = svc.spreadsheets().values().get(
