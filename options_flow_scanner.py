@@ -22,7 +22,7 @@ CYBER       = ["CRWD", "PANW", "ZS"]
 PORTFOLIO   = ["MSFT","NVDA","AMZN","META","TSLA","PLTR","CRWV","IONQ","OKLO",
                "ACHR","DUOL","SOFI","PYPL","PATH","JOBY","UUUU","POET"]
 MEGA_CAPS   = ["AAPL","GOOGL","MSFT","NVDA","AMZN","META","TSLA","AVGO","NFLX","UBER","CRM"]
-HIGH_VOL    = ["AMD","COIN","MSTR","HOOD","SMCI","ARM","SNOW","ASTS","NBIS","RMBS"]
+HIGH_VOL    = ["AMD","COIN","MSTR","HOOD","SMCI","ARM","SNOW","ASTS","NBIS","RMBS","INTC","RDDT"]
 SYMBOL_NAMES = {
     # Indexes
     "SPY": "S&P 500", "QQQ": "Nasdaq", "IWM": "Russell 2000",
@@ -41,6 +41,7 @@ SYMBOL_NAMES = {
     # High vol
     "AMD": "AMD", "COIN": "Coinbase", "MSTR": "MicroStrategy",
     "HOOD": "Robinhood", "SMCI": "SuperMicro", "ARM": "ARM", "SNOW": "Snowflake", "ASTS": "AST SpaceMobile", "NBIS": "Nebius", "RMBS": "Rambus",
+    "INTC": "Intel", "RDDT": "Reddit",
 }
 
 ALL_SYMBOLS = list(dict.fromkeys(INDEX_ETFS + SECTOR_ETFS + DEFENCE + CYBER + MEGA_CAPS + HIGH_VOL + PORTFOLIO))
