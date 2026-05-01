@@ -20,7 +20,7 @@ Mode: DRY_RUN = True (logs what it WOULD trade, no real orders)
 
 Run: python flow_trader.py
 """
-import os, re
+import os, re, requests
 from datetime import datetime, timedelta
 from collections import Counter
 from sheets import _service, SHEET_ID, _append, _ensure_tabs
@@ -361,11 +361,9 @@ def run_flow_trader():
         return
 
     # ── Earnings filter: skip if earnings falls within the spread's expiry window ──
-    # Correct rule: earnings_date < expiry_date → binary event inside our trade → skip
     try:
         import yfinance as yf
-        from datetime import timedelta
-        target_expiry = datetime.now().date() + timedelta(days=30)  # our typical expiry
+        target_expiry = datetime.now().date() + timedelta(days=30)
         earnings_blocked = set()
         for sig in signals:
             sym = sig["symbol"]
@@ -373,11 +371,10 @@ def run_flow_trader():
                 cal = yf.Ticker(sym).calendar
                 earn_date = cal.get("Earnings Date", [None])[0] if cal else None
                 if earn_date and earn_date <= target_expiry:
-                    days_to_earn = (earn_date - datetime.now().date()).days
                     earnings_blocked.add(sym)
                     print(f"  ⏭️ {sym} skipped — earnings {earn_date} inside expiry window")
             except Exception:
-                pass
+                pass  # ETFs and symbols without earnings calendar → OK to trade
         signals = [s for s in signals if s["symbol"] not in earnings_blocked]
     except Exception:
         pass
