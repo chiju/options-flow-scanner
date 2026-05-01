@@ -229,16 +229,14 @@ def _execute_spread(symbol: str, spread: dict, expiry: str) -> bool:
 def check_exits() -> list:
     """
     Check open flow-trader positions and close if exit criteria met.
+    Tracks SPREAD P&L (both legs) not just the short put.
     Exit rules:
-      1. 50% profit (spread worth half of credit received)
-      2. 2× loss (spread worth 3× credit received)
-      3. 7 days before expiry
-      4. Short strike breached (stock below sell strike)
+      1. 50% profit on spread (Tastytrade optimal, 81% win rate)
+      2. 2× loss on spread (stop loss)
+      3. 7 DTE (gamma risk)
     """
     try:
-        import requests, re
         from datetime import date
-
         BASE = "https://paper-api.alpaca.markets/v2"
         H = {"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}
 
@@ -246,63 +244,102 @@ def check_exits() -> list:
         if not isinstance(positions, list):
             return []
 
-        closed = []
-        # Only look at short puts (our sell leg)
-        short_puts = [p for p in positions
-                      if float(p["qty"]) < 0 and re.search(r'\d{6}P\d{8}', p["symbol"])]
-
-        for p in short_puts:
-            sym_match = re.match(r'([A-Z]+)(\d{6})P(\d{8})', p["symbol"])
-            if not sym_match:
+        # Group positions by underlying+expiry to pair spread legs
+        # Key: (underlying, expiry) → {short: pos, long: pos}
+        spreads = {}
+        for p in positions:
+            m = re.match(r'([A-Z]+)(\d{6})P(\d{8})', p["symbol"])
+            if not m:
                 continue
+            underlying, exp_str, strike_raw = m.group(1), m.group(2), m.group(3)
+            key = (underlying, exp_str)
+            qty = float(p["qty"])
+            if key not in spreads:
+                spreads[key] = {"short": None, "long": None, "exp_str": exp_str, "underlying": underlying}
+            if qty < 0:
+                spreads[key]["short"] = p
+            else:
+                spreads[key]["long"] = p
 
-            underlying = sym_match.group(1)
-            exp_str = sym_match.group(2)
-            strike = int(sym_match.group(3)) / 1000
+        closed = []
+        for (underlying, exp_str), legs in spreads.items():
+            short = legs["short"]
+            long  = legs["long"]
+            if not short:
+                continue  # no short leg = not our spread
 
-            entry = abs(float(p["avg_entry_price"]))
-            current = abs(float(p["current_price"]))
-            profit_pct = (entry - current) / entry if entry > 0 else 0
+            # Short leg metrics
+            short_entry   = abs(float(short["avg_entry_price"]))
+            short_current = abs(float(short["current_price"]))
+
+            # Long leg metrics (protective put — cost us money at entry)
+            if long:
+                long_entry   = abs(float(long["avg_entry_price"]))
+                long_current = abs(float(long["current_price"]))
+            else:
+                long_entry, long_current = 0, 0
+
+            # Net credit = what we collected (short premium - long premium)
+            net_credit  = short_entry - long_entry
+            # Current spread value = what it costs to close now
+            spread_cost = short_current - long_current
+
+            # Spread P&L: positive = profit (spread decayed), negative = loss
+            spread_pl_pct = (net_credit - spread_cost) / net_credit if net_credit > 0 else 0
+            spread_pl_dollar = (net_credit - spread_cost) * 100
 
             # DTE
             exp_date = datetime.strptime(exp_str, "%y%m%d").date()
             dte = (exp_date - date.today()).days
 
             reason = None
-            if profit_pct >= 0.50:  # 50% profit = Tastytrade optimal (81% win rate)
-                reason = f"50% profit ({profit_pct:.0%})"
-            elif profit_pct <= -2.0:  # Stop at 2× credit (Tastytrade standard)
-                reason = f"Stop loss ({profit_pct:.0%})"
+            if spread_pl_pct >= 0.50:
+                reason = f"50% profit ({spread_pl_pct:.0%})"
+            elif spread_pl_pct <= -2.0:
+                reason = f"Stop loss ({spread_pl_pct:.0%})"
             elif dte <= 7:
                 reason = f"Near expiry ({dte}d)"
 
-            if reason:
-                # Close the short put
+            if not reason:
+                continue
+
+            # Close both legs
+            success = True
+            for leg, side in [(short, "buy"), (long, "sell")]:
+                if not leg:
+                    continue
                 r = requests.post(f"{BASE}/orders", headers=H, json={
-                    "symbol": p["symbol"], "qty": "1", "side": "buy",
+                    "symbol": leg["symbol"], "qty": "1", "side": side,
                     "type": "market", "time_in_force": "day"
                 })
-                if r.ok:
-                    closed.append(f"✅ Closed {underlying} {p['symbol'][-15:]} | {reason}")
-                    print(f"  Closed: {underlying} | {reason}")
-                    # Log result to TRADE_RESULTS sheet
-                    try:
-                        pl_dollar = (entry - current) * 100  # per contract
-                        win = "WIN" if profit_pct >= 0 else "LOSS"
-                        _append(_service(), SHEET_ID, "TRADE_RESULTS", [[
-                            datetime.now().strftime("%Y-%m-%d"),
-                            underlying,
-                            f"${strike:.0f}P",
-                            exp_str,
-                            f"${entry:.2f}",   # credit received
-                            f"${current:.2f}", # closed at
-                            f"{profit_pct:+.0%}",
-                            f"${pl_dollar:+.0f}",
-                            reason,
-                            win,
-                        ]])
-                    except Exception as log_err:
-                        print(f"  Log error: {log_err}")
+                if not r.ok:
+                    print(f"  ⚠️ Failed to close {side} leg: {leg['symbol']}")
+                    success = False
+
+            if success:
+                short_strike = int(re.search(r'P(\d{8})', short["symbol"]).group(1)) / 1000
+                long_strike  = int(re.search(r'P(\d{8})', long["symbol"]).group(1)) / 1000 if long else short_strike - 10
+                spread_desc  = f"${short_strike:.0f}/${ long_strike:.0f}P"
+                win = "WIN" if spread_pl_dollar >= 0 else "LOSS"
+
+                closed.append(f"{'✅' if win=='WIN' else '❌'} Closed {underlying} {spread_desc} | {reason} | ${spread_pl_dollar:+.0f}")
+                print(f"  Closed: {underlying} {spread_desc} | {reason} | ${spread_pl_dollar:+.0f}")
+
+                try:
+                    _append(_service(), SHEET_ID, "TRADE_RESULTS", [[
+                        datetime.now().strftime("%Y-%m-%d"),
+                        underlying,
+                        spread_desc,
+                        exp_str,
+                        f"${net_credit:.2f}",    # net credit collected
+                        f"${spread_cost:.2f}",   # cost to close
+                        f"{spread_pl_pct:+.0%}", # % P&L on spread
+                        f"${spread_pl_dollar:+.0f}", # $ P&L
+                        reason,
+                        win,
+                    ]])
+                except Exception as log_err:
+                    print(f"  Log error: {log_err}")
 
         return closed
     except Exception as e:
