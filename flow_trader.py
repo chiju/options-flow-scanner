@@ -226,6 +226,14 @@ def _execute_spread(symbol: str, spread: dict, expiry: str) -> bool:
         return False
 
 
+_notified_today = set()  # in-process dedup (within same run)
+
+def _already_notified_today():
+    return _notified_today
+
+def _mark_notified(key):
+    _notified_today.add(key)
+
 def check_exits() -> list:
     """
     Check open flow-trader positions and close if exit criteria met.
@@ -460,15 +468,21 @@ def run_flow_trader():
         if earnings_blocked and USE_10K_ACCOUNT:
             try:
                 from notifier import send
-                lines = ["⏭️ *Flow-15K — Signals Blocked (Earnings)*"]
-                for sym, earn_date in earnings_blocked.items():
-                    sig = next((s for s in signals if s["symbol"] == sym), {})
-                    score = sig.get("score", "?")
-                    prem = sig.get("premium_k", "?")
-                    direction = sig.get("direction", "?")
-                    lines.append(f"  {sym} {direction} | Score:{score} | ${prem}K | Earnings:{earn_date}")
-                lines.append("Skipped per Rule 4 (earnings inside expiry window)")
-                send("\n".join(lines))
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                # Check which symbols already notified today (via sheet log)
+                log_r = _service().spreadsheets().values().get(
+                    spreadsheetId=SHEET_ID, range=f"{TRADE_LOG_TAB}!A:B"
+                ).execute()
+                already_logged = {row[1] for row in log_r.get("values",[]) if len(row)>=2 and row[0]==today_str}
+                new_blocks = {sym: d for sym, d in earnings_blocked.items() if sym not in already_logged}
+                if new_blocks:
+                    lines = ["⏭️ *Flow-15K — Signals Blocked (Earnings)*"]
+                    for sym, earn_date in new_blocks.items():
+                        sig = next((s for s in signals if s["symbol"] == sym), {})
+                        score = sig.get("score","?"); prem = sig.get("premium_k","?"); direction = sig.get("direction","?")
+                        lines.append(f"  {sym} {direction} | Score:{score} | ${prem}K | Earnings:{earn_date}")
+                    lines.append("Skipped per Rule 4 (earnings inside expiry window)")
+                    send("\n".join(lines))
             except Exception:
                 pass
             # Log to sheet
