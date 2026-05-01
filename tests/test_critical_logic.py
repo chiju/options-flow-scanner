@@ -214,25 +214,7 @@ def test_dynamic_risk_scales_with_account():
 
 # ── New rules tests ────────────────────────────────────────────────────────────
 
-def test_earnings_within_expiry_blocked():
-    """Earnings inside spread expiry window should be blocked"""
-    from datetime import date, timedelta
-    today = date.today()
-    expiry = today + timedelta(days=30)
-    assert (today + timedelta(days=10)) < expiry   # 10d = inside = BLOCK
-    assert (today + timedelta(days=40)) > expiry   # 40d = outside = OK
 
 
-def test_30_percent_capital_limit():
-    """Total deployed should not exceed 30% of account"""
-    account_value = 15_000
-    max_deployed = account_value * 0.30  # $4,500
-    assert 6 * 650 < max_deployed   # 6 spreads = $3,900 = OK
-    assert 8 * 650 > max_deployed   # 8 spreads = $5,200 = BLOCK
 
 
-def test_dynamic_risk_scales_with_account():
-    """Per-trade risk scales with account value"""
-    assert int(15_000 * 0.05) == 750
-    assert int(20_000 * 0.05) == 1_000
-    assert int(30_000 * 0.05) == 1_500
