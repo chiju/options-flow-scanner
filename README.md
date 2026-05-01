@@ -278,6 +278,14 @@ Daily trading journals in `journal/YYYY-MM-DD/SYMBOL_journal.md`
 
 ---
 
+## Knowledge Base
+
+- [Options Greeks Explained](knowledge/options_greeks_explained.md) — delta, gamma, theta, vega with real trade examples
+- [Data Sources](knowledge/data_sources.md) — why Schwab/Alpaca/yfinance are each used
+- [Flow Trader Execution Flow](knowledge/flow_trader_execution.md) — step-by-step what happens on each run
+
+---
+
 ## Options Greeks Reference
 
 | Greek | Measures | Simple explanation | Buyer wants | Seller wants |
