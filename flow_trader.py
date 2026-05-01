@@ -363,7 +363,8 @@ def run_flow_trader():
 
     # ── Earnings filter: skip if earnings falls within the spread's expiry window ──
     try:
-        import yfinance as yf
+        import yfinance as yf, logging
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)  # suppress 404 noise
         target_expiry = datetime.now().date() + timedelta(days=30)
         earnings_blocked = set()
         for sig in signals:
