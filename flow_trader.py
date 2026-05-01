@@ -60,6 +60,7 @@ TRADE_LOG_HEADERS = [
 
 # Tab name depends on account
 PAPER_BASE = "https://paper-api.alpaca.markets"
+TRADE_LOG_TAB = "FLOW_TRADE_LOG_15K" if USE_10K_ACCOUNT else "FLOW_TRADE_LOG"
 
 # ── Signal Analysis ───────────────────────────────────────────────────────────
 
