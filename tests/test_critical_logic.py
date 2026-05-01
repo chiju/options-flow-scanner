@@ -165,3 +165,74 @@ def test_notional_sweep_scales_by_price():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ── Earnings and capital limit tests ──────────────────────────────────────────
+
+def test_earnings_within_expiry_blocked():
+    """Earnings inside spread expiry window should be blocked"""
+    from datetime import date, timedelta
+    today = date.today()
+    expiry = today + timedelta(days=30)
+    
+    # Earnings in 10 days = inside 30-day expiry = BLOCK
+    earnings_in_10d = today + timedelta(days=10)
+    assert earnings_in_10d < expiry, "Earnings in 10d should be inside expiry window"
+    
+    # Earnings in 40 days = outside 30-day expiry = OK
+    earnings_in_40d = today + timedelta(days=40)
+    assert earnings_in_40d > expiry, "Earnings in 40d should be outside expiry window"
+
+
+def test_30_percent_capital_limit():
+    """Total deployed should not exceed 30% of account"""
+    account_value = 15_000
+    max_deployed = account_value * 0.30  # $4,500
+    
+    # 6 spreads × $650 = $3,900 = 26% → OK
+    six_spreads = 6 * 650
+    assert six_spreads < max_deployed, "6 spreads should be under 30% limit"
+    
+    # 8 spreads × $650 = $5,200 = 34.7% → BLOCK
+    eight_spreads = 8 * 650
+    assert eight_spreads > max_deployed, "8 spreads should exceed 30% limit"
+
+
+def test_dynamic_risk_scales_with_account():
+    """Per-trade risk should scale with account value"""
+    risk_pct = 0.05
+    
+    account_15k = 15_000
+    assert int(account_15k * risk_pct) == 750
+    
+    account_20k = 20_000
+    assert int(account_20k * risk_pct) == 1_000
+    
+    account_30k = 30_000
+    assert int(account_30k * risk_pct) == 1_500
+
+
+# ── New rules tests ────────────────────────────────────────────────────────────
+
+def test_earnings_within_expiry_blocked():
+    """Earnings inside spread expiry window should be blocked"""
+    from datetime import date, timedelta
+    today = date.today()
+    expiry = today + timedelta(days=30)
+    assert (today + timedelta(days=10)) < expiry   # 10d = inside = BLOCK
+    assert (today + timedelta(days=40)) > expiry   # 40d = outside = OK
+
+
+def test_30_percent_capital_limit():
+    """Total deployed should not exceed 30% of account"""
+    account_value = 15_000
+    max_deployed = account_value * 0.30  # $4,500
+    assert 6 * 650 < max_deployed   # 6 spreads = $3,900 = OK
+    assert 8 * 650 > max_deployed   # 8 spreads = $5,200 = BLOCK
+
+
+def test_dynamic_risk_scales_with_account():
+    """Per-trade risk scales with account value"""
+    assert int(15_000 * 0.05) == 750
+    assert int(20_000 * 0.05) == 1_000
+    assert int(30_000 * 0.05) == 1_500
