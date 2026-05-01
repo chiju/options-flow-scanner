@@ -372,25 +372,28 @@ def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> di
             return {}
 
         if direction == "BULLISH":
-            # Sell PUT spread: strike 12% below current price, $10 wide
-            sell_strike = round(price * (1 - otm_pct) / 5) * 5  # round to $5
-            buy_strike  = sell_strike - 10  # $10 wide spread (professional standard)
+            # Sell PUT spread: strike 12% below current price
+            # Spread width scales with price: $2 for cheap stocks, $10 for expensive
+            spread_width = min(10, max(2, round(price * 0.10 / 2) * 2))  # 10% of price, $2-$10, even numbers
+            sell_strike = round(price * (1 - otm_pct) / spread_width) * spread_width
+            buy_strike  = sell_strike - spread_width
             return {
                 "type": "BULL_PUT_SPREAD",
                 "sell_strike": sell_strike,
                 "buy_strike": buy_strike,
-                "spread_width": 10,
+                "spread_width": spread_width,
                 "current_price": round(price, 2),
             }
         else:
-            # Sell CALL spread: strike 12% above current price, $10 wide
-            sell_strike = round(price * (1 + otm_pct) / 5) * 5
-            buy_strike  = sell_strike + 10
+            # Sell CALL spread: strike 12% above current price
+            spread_width = min(10, max(2, round(price * 0.10 / 2) * 2))
+            sell_strike = round(price * (1 + otm_pct) / spread_width) * spread_width
+            buy_strike  = sell_strike + spread_width
             return {
                 "type": "BEAR_CALL_SPREAD",
                 "sell_strike": sell_strike,
                 "buy_strike": buy_strike,
-                "spread_width": 10,
+                "spread_width": spread_width,
                 "current_price": round(price, 2),
             }
     except Exception as e:
