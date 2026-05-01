@@ -295,8 +295,14 @@ def check_exits() -> list:
 def find_spread_strike(symbol: str, direction: str, otm_pct: float = 0.12) -> dict:
     """Find appropriate strike for spread (10-15% OTM, DTE 21-45)."""
     try:
-        import yfinance as yf
-        price = yf.Ticker(symbol).fast_info.last_price
+        # Use Alpaca for price (already authenticated, faster than yfinance)
+        r = requests.get(
+            f"https://data.alpaca.markets/v2/stocks/{symbol}/quotes/latest",
+            headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET},
+            params={"feed": "iex"}
+        ).json()
+        q = r.get("quote", {})
+        price = (q.get("ap", 0) + q.get("bp", 0)) / 2 or q.get("ap") or q.get("bp")
         if not price:
             return {}
 
