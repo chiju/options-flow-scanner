@@ -33,7 +33,8 @@ if USE_10K_ACCOUNT:
     PAPER_API_KEY    = os.environ.get("ALPACA_FLOW10K_API_KEY", "")
     PAPER_API_SECRET = os.environ.get("ALPACA_FLOW10K_SECRET_KEY", "")
     ACCOUNT_SIZE     = 15_000
-    MAX_RISK_PER_TRADE = 750   # 5% of $15K → fits $10 wide spreads
+    MAX_RISK_PCT     = 0.05   # 5% of account per trade (dynamic)
+    MAX_RISK_PER_TRADE = int(ACCOUNT_SIZE * MAX_RISK_PCT)  # recalculated from live value below
     # Only trade liquid symbols on real-money account (Tastytrade standard)
     TRADEABLE_SYMBOLS = {
         "SPY","QQQ",                              # indexes (best liquidity)
@@ -387,6 +388,10 @@ def run_flow_trader():
             headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}).json()
         account_value = float(acct.get("portfolio_value", ACCOUNT_SIZE))
         max_deployed = account_value * 0.30  # 30% max
+        # Update per-trade risk dynamically based on live account value
+        if USE_10K_ACCOUNT:
+            global MAX_RISK_PER_TRADE
+            MAX_RISK_PER_TRADE = int(account_value * 0.05)  # 5% of current value
         current_deployed = sum(
             abs(float(p["market_value"])) for p in open_pos
             if isinstance(open_pos, list) and float(p.get("qty",0)) < 0
