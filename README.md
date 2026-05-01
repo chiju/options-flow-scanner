@@ -341,3 +341,33 @@ Rule: What's safe for sellers is risky for buyers, and vice versa.
 ---
 Educational and research purposes only. Options trading involves significant risk.
 Past flow patterns do not guarantee future price movements. Not financial advice.
+
+---
+
+## Risk Management Rules
+
+Based on Tastytrade research + GodzillaTrader sizing guidelines (Apr 2026):
+
+```
+Per trade:    Max 5% of account at risk
+Total open:   Max 30% of account deployed at once
+Earnings:     Skip if earnings falls within spread expiry window (live check)
+Expiry:       21-45 DTE monthly (not weekly — gamma risk too high)
+Profit exit:  50% of credit collected → 81% win rate (Tastytrade research)
+Stop loss:    2× credit received
+Gamma exit:   Close at 7 DTE regardless
+```
+
+**Why skip earnings:**
+Earnings = binary event. IV is inflated (premium looks attractive) but actual
+risk is much higher. A 20% gap can blow through the spread. Skip earnings,
+trade non-earnings setups for consistent income.
+
+**Why monthly not weekly:**
+Weekly (7 DTE) has extreme gamma risk — small stock move = large option loss.
+Monthly (21-45 DTE) gives time to recover and theta decays at optimal rate.
+
+**Paper accounts:**
+- Sandbox ($101K): tests all signals, no restrictions
+- Realistic ($15K): applies all rules above, mirrors real-world constraints
+
