@@ -284,6 +284,7 @@ Daily trading journals in `journal/YYYY-MM-DD/SYMBOL_journal.md`
 - [Data Sources](knowledge/data_sources.md) — why Schwab/Alpaca/yfinance are each used
 - [Flow Trader Execution Flow](knowledge/flow_trader_execution.md) — step-by-step what happens on each run
 - [Scanner Logic](knowledge/scanner_logic.md) — how sweeps/unusual signals are detected, scoring system, 38K contracts/run
+- [Scanner Data Flow](knowledge/scanner_data_flow.md) — how alerts are logged, compared, and deduplicated across sheets
 - [Flow Trader Code Explained](knowledge/flow_trader_code_explained.md) — line-by-line code walkthrough, data flow, design decisions
 - [Troubleshooting Log](knowledge/troubleshooting_log.md) — all bugs encountered, root causes, fixes with commit references
 
