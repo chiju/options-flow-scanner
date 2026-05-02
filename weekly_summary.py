@@ -158,7 +158,9 @@ def run_weekly_summary():
             lines.append("\n📅 *Earnings This Week*")
             for earn_date, sym, name, price, days_to, bias in upcoming:
                 price_str = f"${price:.2f}" if price else "N/A"
-                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ({name}) {price_str} | {bias}")
+                in_portfolio = "💼" if sym in PORTFOLIO else ""
+                bias_str = bias if bias != "⬜" else "⚪ No flow data"
+                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ({name}) {price_str} {in_portfolio} | {bias_str}")
     except Exception as e:
         lines.append(f"\n📅 Earnings section error: {e}")
 
