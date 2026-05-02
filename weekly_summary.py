@@ -95,7 +95,8 @@ def run_weekly_summary():
             if days_left < 7:
                 lines.append(f"\n⚠️ *Schwab token expires in {days_left:.0f} days!*")
                 lines.append("Run locally: `python schwab_token_store.py save`")
-    except Exception:
+    except Exception as e:
+        lines.append(f"\n📅 Earnings error: {e}")
         pass
 
     # ── Upcoming earnings (next 30 days) for all watchlist symbols ──────────────
@@ -103,12 +104,12 @@ def run_weekly_summary():
         import yfinance as yf, logging
         logging.getLogger("yfinance").setLevel(logging.CRITICAL)
         from datetime import date as _date
-        from options_flow_scanner import SYMBOLS  # full watchlist
-
+        from options_flow_scanner import INDEX_ETFS, SECTOR_ETFS, DEFENCE, CYBER, PORTFOLIO, MEGA_CAPS, HIGH_VOL
+        all_syms = sorted(set(INDEX_ETFS+SECTOR_ETFS+DEFENCE+CYBER+PORTFOLIO+MEGA_CAPS+HIGH_VOL))
         today = _date.today()
-        cutoff = today + timedelta(days=30)  # timedelta from top-level import
+        cutoff = today + timedelta(days=30)
         upcoming = []
-        for sym in sorted(SYMBOLS):
+        for sym in all_syms:
             try:
                 cal = yf.Ticker(sym).calendar
                 earn_date = cal.get("Earnings Date", [None])[0] if cal else None
@@ -120,19 +121,16 @@ def run_weekly_summary():
                         params={"feed":"iex"}).json()
                     q = snap.get("quote",{})
                     price = (q.get("ap",0)+q.get("bp",0))/2 or q.get("ap",0)
-                    days_to = (earn_date - today).days
-                    upcoming.append((earn_date, sym, price, days_to))
+                    upcoming.append((earn_date, sym, price, (earn_date-today).days))
             except Exception:
                 pass
-
         if upcoming:
             upcoming.sort()
             lines.append("\n📅 *Upcoming Earnings (next 30 days)*")
             for earn_date, sym, price, days_to in upcoming:
-                price_str = f"${price:.2f}" if price else "N/A"
-                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* {price_str}")
-    except Exception:
-        pass
+                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ${price:.2f}" if price else f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}*")
+    except Exception as e:
+        lines.append(f"\n📅 Earnings section error: {e}")
 
     send("\n".join(lines))
     print("✅ Weekly summary sent.")
