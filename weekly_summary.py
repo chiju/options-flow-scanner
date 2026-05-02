@@ -102,11 +102,11 @@ def run_weekly_summary():
     try:
         import yfinance as yf, logging
         logging.getLogger("yfinance").setLevel(logging.CRITICAL)
-        from datetime import date, timedelta
+        from datetime import date as _date
         from options_flow_scanner import SYMBOLS  # full watchlist
 
-        today = date.today()
-        cutoff = today + timedelta(days=30)
+        today = _date.today()
+        cutoff = today + timedelta(days=30)  # timedelta from top-level import
         upcoming = []
         for sym in sorted(SYMBOLS):
             try:
