@@ -108,6 +108,25 @@ def run_weekly_summary():
         all_syms = sorted(set(INDEX_ETFS+SECTOR_ETFS+DEFENCE+CYBER+PORTFOLIO+MEGA_CAPS+HIGH_VOL))
         today = _date.today()
         cutoff = today + timedelta(days=30)
+
+        # Get last 7 days of options flow to determine bias per symbol
+        week_ago = (today - timedelta(days=7)).strftime("%Y-%m-%d")
+        flow_r = svc.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID, range="UNUSUAL_ALERTS!A:H"
+        ).execute()
+        flow_rows = [r for r in flow_r.get("values",[]) if len(r)>=8 and r[0]>=week_ago]
+
+        def get_bias(sym):
+            sym_rows = [r for r in flow_rows if r[1]==sym]
+            if not sym_rows: return "⬜"
+            calls = sum(int(r[7]) for r in sym_rows if r[2]=="CALL" and r[7].isdigit())
+            puts  = sum(int(r[7]) for r in sym_rows if r[2]=="PUT"  and r[7].isdigit())
+            if calls == puts == 0: return "⬜"
+            ratio = calls / (calls + puts)
+            if ratio >= 0.70:   return "🟢 Bullish"
+            elif ratio <= 0.30: return "🔴 Bearish"
+            else:               return "🟡 Neutral"
+
         upcoming = []
         for sym in all_syms:
             try:
@@ -121,14 +140,16 @@ def run_weekly_summary():
                         params={"feed":"iex"}).json()
                     q = snap.get("quote",{})
                     price = (q.get("ap",0)+q.get("bp",0))/2 or q.get("ap",0)
-                    upcoming.append((earn_date, sym, price, (earn_date-today).days))
+                    bias = get_bias(sym)
+                    upcoming.append((earn_date, sym, price, (earn_date-today).days, bias))
             except Exception:
                 pass
         if upcoming:
             upcoming.sort()
             lines.append("\n📅 *Upcoming Earnings (next 30 days)*")
-            for earn_date, sym, price, days_to in upcoming:
-                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ${price:.2f}" if price else f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}*")
+            for earn_date, sym, price, days_to, bias in upcoming:
+                price_str = f"${price:.2f}" if price else "N/A"
+                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* {price_str} | {bias}")
     except Exception as e:
         lines.append(f"\n📅 Earnings section error: {e}")
 
