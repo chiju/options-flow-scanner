@@ -37,6 +37,9 @@ def run_weekly_summary():
 
     # Most active symbols
     sym_counts = Counter(r[1] for r in week_rows)
+    # Call vs put counts per symbol
+    sym_calls = Counter(r[1] for r in week_rows if len(r)>2 and r[2]=="CALL")
+    sym_puts  = Counter(r[1] for r in week_rows if len(r)>2 and r[2]=="PUT")
 
     # Biggest flows — deduplicated by contract (sym+type+strike+expiry), keep max premium
     seen_contracts = {}
@@ -68,7 +71,10 @@ def run_weekly_summary():
         "*🏆 Most Active Symbols*",
     ]
     for sym, count in sym_counts.most_common(8):
-        lines.append(f"  `{sym}` — {count} alerts")
+        c = sym_calls.get(sym, 0)
+        p = sym_puts.get(sym, 0)
+        bias = "🟢" if c > p*2 else ("🔴" if p > c*2 else "🟡")
+        lines.append(f"  `{sym}` — {count} alerts {bias} ({c}🐂 {p}🐻)")
 
     lines.append("\n*💰 Top 5 Flows This Week*")
     for premium_k, sym, typ, strike, expiry in flows[:5]:
