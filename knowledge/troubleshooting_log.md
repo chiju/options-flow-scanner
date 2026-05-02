@@ -4,6 +4,18 @@ All bugs encountered, root causes, and fixes. Most recent first.
 
 ---
 
+## 2026-05-02 — Divergence warning spamming every 15 minutes
+
+**Symptom:** Same MSTR/NBIS divergence warning firing every 15 min all day.
+
+**Root cause:** No dedup on divergence alerts. Every scan run re-checks and re-fires if conditions still met.
+
+**Fix:** Check SIGNAL_HISTORY sheet for today's DIVERGENCE entries before sending. Log each new divergence to SIGNAL_HISTORY so it's not re-sent.
+
+**Commit:** `1765309`
+
+---
+
 ## 2026-05-01 — GitHub secret ALPACA_CSP_API_KEY stale (401 on orders)
 
 **Symptom:** CSP/FlowTrader account getting 401 "unauthorized" on every order attempt despite local key working fine.
