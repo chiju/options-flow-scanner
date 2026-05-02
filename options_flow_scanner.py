@@ -928,7 +928,7 @@ def run_scan(force_send: bool = False):
             for r in results:
                 sym = r["symbol"]
                 if sym in div_warned_today:
-                    continue  # already notified today
+                    continue
                 price_chg = price_changes.get(sym, 0)
                 if not isinstance(price_chg, (int, float)) or price_chg < 5:
                     continue
@@ -938,22 +938,50 @@ def run_scan(force_send: bool = False):
                     total_sell = sum(e["premium"] for e in call_sells)
                     total_buy  = sum(e["premium"] for e in call_buys)
                     if total_sell > total_buy * 1.5:
+                        # ── Classify the selling ──────────────────────────────
+                        avg_delta = sum(abs(e.get("delta") or 0) for e in call_sells) / len(call_sells)
+                        avg_vol_oi = sum(e.get("vol_oi_ratio") or 0 for e in call_sells) / len(call_sells)
+                        has_sweep = any(e.get("sweep") for e in call_sells)
+
+                        # Delta classification
+                        if avg_delta >= 0.70:
+                            delta_label = "🔴 Deep ITM (informed exit — existing longs leaving)"
+                            conviction = "HIGH"
+                        elif avg_delta >= 0.40:
+                            delta_label = "🟡 ATM (profit-taking or new short)"
+                            conviction = "MEDIUM"
+                        else:
+                            delta_label = "🟢 OTM (covered call writing or hedging)"
+                            conviction = "LOW"
+
+                        # Vol/OI classification
+                        if avg_vol_oi and avg_vol_oi > 5:
+                            flow_type = "🐻 Directional (new position, vol >> OI)"
+                        elif avg_vol_oi and avg_vol_oi > 1:
+                            flow_type = "↔️ Mixed (could be closing or new)"
+                        else:
+                            flow_type = "🛡️ Hedging (vol ≤ OI, likely closing)"
+
+                        sweep_label = "⚡ Sweep (urgent)" if has_sweep else "📋 Block (patient)"
+
                         divergence_alerts.append(
-                            f"⚠️ *{sym}* up {price_chg:+.1f}% but calls SOLD "
-                            f"(${total_sell//1000}K sell vs ${total_buy//1000}K buy)"
+                            f"⚠️ *{sym}* up {price_chg:+.1f}% but calls SOLD\n"
+                            f"   ${total_sell//1000}K sell vs ${total_buy//1000}K buy\n"
+                            f"   {delta_label}\n"
+                            f"   {flow_type} | {sweep_label}\n"
+                            f"   Conviction: {conviction}"
                         )
-                        # Log to SIGNAL_HISTORY so we don't re-alert today
                         try:
                             _append(_svc(), SHEET_ID, "SIGNAL_HISTORY", [[
                                 datetime.now().strftime("%Y-%m-%d %H:%M"), "DIVERGENCE", sym,
-                                f"up {price_chg:+.1f}% calls sold ${total_sell//1000}K"
+                                f"up {price_chg:+.1f}% calls sold ${total_sell//1000}K | {conviction} | delta:{avg_delta:.2f}"
                             ]])
                         except Exception:
                             pass
             if divergence_alerts:
                 msg = "*🔍 Divergence Warning — Possible Informed Exit*\n\n"
-                msg += "\n".join(divergence_alerts)
-                msg += "\n\n_Stock rising but smart money selling calls = potential bad news ahead. Consider reducing position._"
+                msg += "\n\n".join(divergence_alerts)
+                msg += "\n\n_Stock rising but smart money selling calls. Check delta + vol/OI for conviction._"
                 send_telegram(msg)
                 print(f"  ⚠️ Divergence alerts: {len(divergence_alerts)}")
         except Exception:
