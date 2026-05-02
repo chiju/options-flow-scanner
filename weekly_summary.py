@@ -107,7 +107,7 @@ def run_weekly_summary():
         from options_flow_scanner import INDEX_ETFS, SECTOR_ETFS, DEFENCE, CYBER, PORTFOLIO, MEGA_CAPS, HIGH_VOL
         all_syms = sorted(set(INDEX_ETFS+SECTOR_ETFS+DEFENCE+CYBER+PORTFOLIO+MEGA_CAPS+HIGH_VOL))
         today = _date.today()
-        cutoff = today + timedelta(days=30)
+        cutoff = today + timedelta(days=7)
 
         # Get last 7 days of options flow to determine bias per symbol
         week_ago = (today - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -146,7 +146,7 @@ def run_weekly_summary():
                 pass
         if upcoming:
             upcoming.sort()
-            lines.append("\n📅 *Upcoming Earnings (next 30 days)*")
+            lines.append("\n📅 *Earnings This Week*")
             for earn_date, sym, price, days_to, bias in upcoming:
                 price_str = f"${price:.2f}" if price else "N/A"
                 lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* {price_str} | {bias}")
