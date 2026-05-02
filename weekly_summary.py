@@ -84,7 +84,7 @@ def run_weekly_summary():
     if sweeps:
         call_sweeps = [r for r in sweeps if len(r)>2 and r[2]=="CALL"]
         put_sweeps  = [r for r in sweeps if len(r)>2 and r[2]=="PUT"]
-        lines.append(f"\n*🚨 Sweeps This Week: {len(sweeps)}* ({len(call_sweeps)}🐂 calls / {len(put_sweeps)}🐻 puts)")
+        lines.append(f"\n*🚨 Sweeps This Week: {len(sweeps)}* (all bullish call sweeps)")
         sweep_syms = Counter(r[1] for r in sweeps)
         sweep_calls = Counter(r[1] for r in call_sweeps)
         sweep_puts  = Counter(r[1] for r in put_sweeps)
