@@ -104,7 +104,7 @@ def run_weekly_summary():
         import yfinance as yf, logging
         logging.getLogger("yfinance").setLevel(logging.CRITICAL)
         from datetime import date as _date
-        from options_flow_scanner import INDEX_ETFS, SECTOR_ETFS, DEFENCE, CYBER, PORTFOLIO, MEGA_CAPS, HIGH_VOL
+        from options_flow_scanner import INDEX_ETFS, SECTOR_ETFS, DEFENCE, CYBER, PORTFOLIO, MEGA_CAPS, HIGH_VOL, SYMBOL_NAMES
         all_syms = sorted(set(INDEX_ETFS+SECTOR_ETFS+DEFENCE+CYBER+PORTFOLIO+MEGA_CAPS+HIGH_VOL))
         today = _date.today()
         cutoff = today + timedelta(days=7)
@@ -137,19 +137,28 @@ def run_weekly_summary():
                         f"https://data.alpaca.markets/v2/stocks/{sym}/quotes/latest",
                         headers={"APCA-API-KEY-ID": os.environ.get("ALPACA_LIVE_API_KEY",""),
                                  "APCA-API-SECRET-KEY": os.environ.get("ALPACA_LIVE_SECRET_KEY","")},
-                        params={"feed":"iex"}).json()
+                        params={"feed":"sip"}).json()  # sip = consolidated, better on weekends
                     q = snap.get("quote",{})
                     price = (q.get("ap",0)+q.get("bp",0))/2 or q.get("ap",0)
+                    # fallback to prev close if quote stale
+                    if not price:
+                        bar = requests.get(
+                            f"https://data.alpaca.markets/v2/stocks/{sym}/bars/latest",
+                            headers={"APCA-API-KEY-ID": os.environ.get("ALPACA_LIVE_API_KEY",""),
+                                     "APCA-API-SECRET-KEY": os.environ.get("ALPACA_LIVE_SECRET_KEY","")},
+                            params={"feed":"sip","timeframe":"1Day"}).json()
+                        price = bar.get("bar",{}).get("c",0)
+                    name = SYMBOL_NAMES.get(sym, sym)
                     bias = get_bias(sym)
-                    upcoming.append((earn_date, sym, price, (earn_date-today).days, bias))
+                    upcoming.append((earn_date, sym, name, price, (earn_date-today).days, bias))
             except Exception:
                 pass
         if upcoming:
             upcoming.sort()
             lines.append("\n📅 *Earnings This Week*")
-            for earn_date, sym, price, days_to, bias in upcoming:
+            for earn_date, sym, name, price, days_to, bias in upcoming:
                 price_str = f"${price:.2f}" if price else "N/A"
-                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* {price_str} | {bias}")
+                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ({name}) {price_str} | {bias}")
     except Exception as e:
         lines.append(f"\n📅 Earnings section error: {e}")
 
