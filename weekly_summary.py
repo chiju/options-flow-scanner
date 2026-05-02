@@ -2,7 +2,7 @@
 Weekly summary report — runs every Friday at 4pm ET.
 Reads the week's UNUSUAL_ALERTS from Google Sheets and sends a digest to Telegram.
 """
-import os
+import os, requests
 from datetime import datetime, timedelta
 from collections import Counter
 from sheets import _service, SHEET_ID
@@ -95,6 +95,42 @@ def run_weekly_summary():
             if days_left < 7:
                 lines.append(f"\n⚠️ *Schwab token expires in {days_left:.0f} days!*")
                 lines.append("Run locally: `python schwab_token_store.py save`")
+    except Exception:
+        pass
+
+    # ── Upcoming earnings (next 30 days) for all watchlist symbols ──────────────
+    try:
+        import yfinance as yf, logging
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+        from datetime import date, timedelta
+        from options_flow_scanner import SYMBOLS  # full watchlist
+
+        today = date.today()
+        cutoff = today + timedelta(days=30)
+        upcoming = []
+        for sym in sorted(SYMBOLS):
+            try:
+                cal = yf.Ticker(sym).calendar
+                earn_date = cal.get("Earnings Date", [None])[0] if cal else None
+                if earn_date and today <= earn_date <= cutoff:
+                    snap = requests.get(
+                        f"https://data.alpaca.markets/v2/stocks/{sym}/quotes/latest",
+                        headers={"APCA-API-KEY-ID": os.environ.get("ALPACA_LIVE_API_KEY",""),
+                                 "APCA-API-SECRET-KEY": os.environ.get("ALPACA_LIVE_SECRET_KEY","")},
+                        params={"feed":"iex"}).json()
+                    q = snap.get("quote",{})
+                    price = (q.get("ap",0)+q.get("bp",0))/2 or q.get("ap",0)
+                    days_to = (earn_date - today).days
+                    upcoming.append((earn_date, sym, price, days_to))
+            except Exception:
+                pass
+
+        if upcoming:
+            upcoming.sort()
+            lines.append("\n📅 *Upcoming Earnings (next 30 days)*")
+            for earn_date, sym, price, days_to in upcoming:
+                price_str = f"${price:.2f}" if price else "N/A"
+                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* {price_str}")
     except Exception:
         pass
 
