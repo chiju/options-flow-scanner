@@ -151,7 +151,9 @@ def run_weekly_summary():
             except Exception:
                 pass
         if upcoming:
-            upcoming.sort()
+            # Sort: Bullish first, then Neutral, then No data, then Bearish — within each by date
+            sentiment_order = {"🟢 Bullish": 0, "🟡 Neutral": 1, "⚪ No flow data": 2, "🔴 Bearish": 3}
+            upcoming.sort(key=lambda x: (sentiment_order.get(x[5] if x[5] != "⬜" else "⚪ No flow data", 2), x[0]))
             lines.append("\n📅 *Earnings This Week*")
             for earn_date, sym, name, price, days_to, bias in upcoming:
                 price_str = f"${price:.2f}" if price else "N/A"
