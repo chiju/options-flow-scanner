@@ -82,10 +82,17 @@ def run_weekly_summary():
         lines.append(f"  {side} `{sym}` ${strike} {expiry} — ${premium_k:,}K")
 
     if sweeps:
-        lines.append(f"\n*🚨 Sweeps This Week: {len(sweeps)}*")
+        call_sweeps = [r for r in sweeps if len(r)>2 and r[2]=="CALL"]
+        put_sweeps  = [r for r in sweeps if len(r)>2 and r[2]=="PUT"]
+        lines.append(f"\n*🚨 Sweeps This Week: {len(sweeps)}* ({len(call_sweeps)}🐂 calls / {len(put_sweeps)}🐻 puts)")
         sweep_syms = Counter(r[1] for r in sweeps)
+        sweep_calls = Counter(r[1] for r in call_sweeps)
+        sweep_puts  = Counter(r[1] for r in put_sweeps)
         for sym, count in sweep_syms.most_common(5):
-            lines.append(f"  `{sym}` — {count} sweeps")
+            c = sweep_calls.get(sym, 0)
+            p = sweep_puts.get(sym, 0)
+            bias = "🟢" if c > p*2 else ("🔴" if p > c*2 else "🟡")
+            lines.append(f"  `{sym}` — {count} sweeps {bias} ({c}🐂 {p}🐻)")
 
     lines.append("\n_Not financial advice._")
 
