@@ -133,22 +133,13 @@ def run_weekly_summary():
                 cal = yf.Ticker(sym).calendar
                 earn_date = cal.get("Earnings Date", [None])[0] if cal else None
                 if earn_date and today <= earn_date <= cutoff:
-                    snap = requests.get(
-                        f"https://data.alpaca.markets/v2/stocks/{sym}/quotes/latest",
-                        headers={"APCA-API-KEY-ID": os.environ.get("ALPACA_LIVE_API_KEY",""),
-                                 "APCA-API-SECRET-KEY": os.environ.get("ALPACA_LIVE_SECRET_KEY","")},
-                        params={"feed":"sip"}).json()  # sip = consolidated, better on weekends
-                    q = snap.get("quote",{})
-                    price = (q.get("ap",0)+q.get("bp",0))/2 or q.get("ap",0)
-                    # fallback to prev close if quote stale
-                    if not price:
-                        bar = requests.get(
-                            f"https://data.alpaca.markets/v2/stocks/{sym}/bars/latest",
-                            headers={"APCA-API-KEY-ID": os.environ.get("ALPACA_LIVE_API_KEY",""),
-                                     "APCA-API-SECRET-KEY": os.environ.get("ALPACA_LIVE_SECRET_KEY","")},
-                            params={"feed":"sip","timeframe":"1Day"}).json()
-                        price = bar.get("bar",{}).get("c",0)
-                    name = SYMBOL_NAMES.get(sym, sym)
+                    # Get price via yfinance (reliable on weekends)
+                    try:
+                        ticker = yf.Ticker(sym)
+                        price = ticker.fast_info.last_price or ticker.fast_info.previous_close or 0
+                    except Exception:
+                        price = 0
+                    name = SYMBOL_NAMES.get(sym) or yf.Ticker(sym).info.get("shortName", sym)
                     bias = get_bias(sym)
                     upcoming.append((earn_date, sym, name, price, (earn_date-today).days, bias))
             except Exception:
