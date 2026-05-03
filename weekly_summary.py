@@ -161,12 +161,23 @@ def run_weekly_summary():
             # Sort: Bullish first, then Neutral, then No data, then Bearish — within each by date
             sentiment_order = {"🟢 Bullish": 0, "🟡 Neutral": 1, "⚪ No flow data": 2, "🔴 Bearish": 3}
             upcoming.sort(key=lambda x: (sentiment_order.get(x[5] if x[5] != "⬜" else "⚪ No flow data", 2), x[0]))
-            lines.append("\n📅 *Earnings This Week*")
-            for earn_date, sym, name, price, days_to, bias in upcoming:
-                price_str = f"${price:.2f}" if price else "N/A"
-                in_portfolio = "💼" if sym in PORTFOLIO else ""
-                bias_str = bias if bias != "⬜" else "⚪ No flow data"
-                lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ({name}) {price_str} {in_portfolio} | {bias_str}")
+
+            portfolio_earnings = [(d,s,n,p,dt,b) for d,s,n,p,dt,b in upcoming if s in PORTFOLIO]
+            watchlist_earnings  = [(d,s,n,p,dt,b) for d,s,n,p,dt,b in upcoming if s not in PORTFOLIO]
+
+            if portfolio_earnings:
+                lines.append("\n📅 *Earnings This Week — Your Portfolio*")
+                for earn_date, sym, name, price, days_to, bias in portfolio_earnings:
+                    price_str = f"${price:.2f}" if price else "N/A"
+                    bias_str = bias if bias != "⬜" else "⚪ No flow data"
+                    lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ({name}) {price_str} 💼 | {bias_str}")
+
+            if watchlist_earnings:
+                lines.append("\n📊 *Earnings This Week — Watchlist*")
+                for earn_date, sym, name, price, days_to, bias in watchlist_earnings:
+                    price_str = f"${price:.2f}" if price else "N/A"
+                    bias_str = bias if bias != "⬜" else "⚪ No flow data"
+                    lines.append(f"  {earn_date.strftime('%b %d')} ({days_to}d) — *{sym}* ({name}) {price_str} | {bias_str}")
     except Exception as e:
         lines.append(f"\n📅 Earnings section error: {e}")
 
