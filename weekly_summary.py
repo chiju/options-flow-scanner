@@ -68,16 +68,40 @@ def run_weekly_summary():
         f"Total alerts: {len(week_rows)} | Calls: {len(calls)} | Puts: {len(puts)} | Sweeps: {len(sweeps)}",
         f"Total call premium: ${total_call_k:,}K | Put premium: ${total_put_k:,}K",
         f"Overall bias: {'🐂 Bullish' if total_call_k > total_put_k else '🐻 Bearish'}\n",
-        "*🏆 Most Active Symbols*",
+        "*🏆 Most Active — Your Portfolio*",
     ]
-    for sym, count in sym_counts.most_common(8):
-        c = sym_calls.get(sym, 0)
-        p = sym_puts.get(sym, 0)
+    portfolio_syms = set(PORTFOLIO) if 'PORTFOLIO' in dir() else set()
+    try:
+        from options_flow_scanner import PORTFOLIO as _PORT
+        portfolio_syms = set(_PORT)
+    except Exception:
+        pass
+    # Portfolio symbols first
+    portfolio_active = [(sym, count) for sym, count in sym_counts.most_common(30) if sym in portfolio_syms]
+    for sym, count in portfolio_active[:6]:
+        c = sym_calls.get(sym, 0); p = sym_puts.get(sym, 0)
+        bias = "🟢" if c > p*2 else ("🔴" if p > c*2 else "🟡")
+        lines.append(f"  💼 `{sym}` — {count} alerts {bias} ({c}🐂 {p}🐻)")
+
+    lines.append("\n*🏆 Most Active — Watchlist*")
+    watchlist_active = [(sym, count) for sym, count in sym_counts.most_common(30) if sym not in portfolio_syms]
+    for sym, count in watchlist_active[:6]:
+        c = sym_calls.get(sym, 0); p = sym_puts.get(sym, 0)
         bias = "🟢" if c > p*2 else ("🔴" if p > c*2 else "🟡")
         lines.append(f"  `{sym}` — {count} alerts {bias} ({c}🐂 {p}🐻)")
 
-    lines.append("\n*💰 Top 5 Flows This Week*")
-    for premium_k, sym, typ, strike, expiry in flows[:5]:
+    # Top flows — split portfolio vs watchlist
+    portfolio_flows = [(pk,s,t,st,ex) for pk,s,t,st,ex in flows if s in portfolio_syms]
+    watchlist_flows  = [(pk,s,t,st,ex) for pk,s,t,st,ex in flows if s not in portfolio_syms]
+
+    if portfolio_flows:
+        lines.append("\n*💰 Top Flows — Your Portfolio*")
+        for premium_k, sym, typ, strike, expiry in portfolio_flows[:3]:
+            side = "🐂 CALL" if typ == "CALL" else "🐻 PUT"
+            lines.append(f"  {side} 💼`{sym}` ${strike} {expiry} — ${premium_k:,}K")
+
+    lines.append("\n*💰 Top Flows — Watchlist*")
+    for premium_k, sym, typ, strike, expiry in watchlist_flows[:5]:
         side = "🐂 CALL" if typ == "CALL" else "🐻 PUT"
         lines.append(f"  {side} `{sym}` ${strike} {expiry} — ${premium_k:,}K")
 
@@ -88,11 +112,14 @@ def run_weekly_summary():
         sweep_syms = Counter(r[1] for r in sweeps)
         sweep_calls = Counter(r[1] for r in call_sweeps)
         sweep_puts  = Counter(r[1] for r in put_sweeps)
-        for sym, count in sweep_syms.most_common(5):
-            c = sweep_calls.get(sym, 0)
-            p = sweep_puts.get(sym, 0)
+        # Portfolio sweeps first
+        port_sweeps = [(sym,cnt) for sym,cnt in sweep_syms.most_common(20) if sym in portfolio_syms]
+        other_sweeps = [(sym,cnt) for sym,cnt in sweep_syms.most_common(20) if sym not in portfolio_syms]
+        for sym, count in (port_sweeps[:3] + other_sweeps[:3]):
+            c = sweep_calls.get(sym, 0); p = sweep_puts.get(sym, 0)
             bias = "🟢" if c > p*2 else ("🔴" if p > c*2 else "🟡")
-            lines.append(f"  `{sym}` — {count} sweeps {bias} ({c}🐂 {p}🐻)")
+            tag = "💼" if sym in portfolio_syms else ""
+            lines.append(f"  {tag}`{sym}` — {count} sweeps {bias} ({c}🐂 {p}🐻)")
 
     lines.append("\n_Not financial advice._")
 
