@@ -220,16 +220,40 @@ def run_weekly_summary():
         ).execute()
         if not existing.get("values"):
             _append(svc, SHEET_ID, "WEEKLY_REPORTS", [["week_start", "date_saved", "total_alerts", "call_premium_k", "put_premium_k", "top_symbol", "summary"]])
-        _append(svc, SHEET_ID, "WEEKLY_REPORTS", [[
+        # Insert at row 2 (after header) so newest is always at top
+        new_row = [[
             monday.strftime("%Y-%m-%d"),
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             len(week_rows),
             total_call_k,
             total_put_k,
             sym_counts.most_common(1)[0][0] if sym_counts else "",
-            "\n".join(lines)[:5000]  # truncate to 5K chars for sheets
-        ]])
-        print("✅ Weekly report saved to WEEKLY_REPORTS sheet.")
+            "\n".join(lines)[:5000]
+        ]]
+        svc.spreadsheets().values().update(
+            spreadsheetId=SHEET_ID,
+            range="WEEKLY_REPORTS!A2",
+            valueInputOption="RAW",
+            body={"values": new_row}
+        ).execute()
+        # Shift old rows down by inserting a blank row first
+        # Simpler: just use insertDimension to push row 2 down
+        sheet_id = next(
+            s["properties"]["sheetId"]
+            for s in svc.spreadsheets().get(spreadsheetId=SHEET_ID).execute()["sheets"]
+            if s["properties"]["title"] == "WEEKLY_REPORTS"
+        )
+        svc.spreadsheets().batchUpdate(spreadsheetId=SHEET_ID, body={"requests": [{
+            "insertDimension": {
+                "range": {"sheetId": sheet_id, "dimension": "ROWS", "startIndex": 1, "endIndex": 2},
+                "inheritFromBefore": False
+            }
+        }]}).execute()
+        svc.spreadsheets().values().update(
+            spreadsheetId=SHEET_ID, range="WEEKLY_REPORTS!A2",
+            valueInputOption="RAW", body={"values": new_row}
+        ).execute()
+        print("✅ Weekly report saved to WEEKLY_REPORTS sheet (newest at top).")
     except Exception as e:
         print(f"  ⚠️ Could not save to sheets: {e}")
 
