@@ -964,8 +964,9 @@ def run_scan(force_send: bool = False):
 
                         sweep_label = "⚡ Sweep (urgent)" if has_sweep else "📋 Block (patient)"
 
+                        own = "  💼 *YOU OWN THIS*" if sym in PORTFOLIO else ""
                         divergence_alerts.append(
-                            f"⚠️ *{sym}* up {price_chg:+.1f}% but calls SOLD\n"
+                            f"⚠️ *{sym}* up {price_chg:+.1f}% but calls SOLD{own}\n"
                             f"   ${total_sell//1000}K sell vs ${total_buy//1000}K buy\n"
                             f"   {delta_label}\n"
                             f"   {flow_type} | {sweep_label}\n"
@@ -979,6 +980,8 @@ def run_scan(force_send: bool = False):
                         except Exception:
                             pass
             if divergence_alerts:
+                # Sort: portfolio stocks first
+                divergence_alerts.sort(key=lambda x: (0 if "YOU OWN THIS" in x else 1))
                 msg = "*🔍 Divergence Warning — Possible Informed Exit*\n\n"
                 msg += "\n\n".join(divergence_alerts)
                 msg += "\n\n_Stock rising but smart money selling calls. Check delta + vol/OI for conviction._"
@@ -1032,7 +1035,9 @@ def run_scan(force_send: bool = False):
             _append(svc, SHEET_ID, "SIGNAL_HISTORY", log_rows)
         except Exception:
             pass
-        for f in gf[:3]:
+        # Sort: portfolio stocks first
+        gf_sorted = sorted(gf[:5], key=lambda x: (0 if x["_sym"] in PORTFOLIO else 1, -x["premium"]))
+        for f in gf_sorted[:3]:
             side = "🐂 CALL" if f["type"] == "CALL" else "🐻 PUT"
             conf = confluence_score(f["_sym"], f["type"], results, gamma_data, news_data)
             own = "  💼 *YOU OWN THIS*" if f["_sym"] in PORTFOLIO else ""
@@ -1041,7 +1046,9 @@ def run_scan(force_send: bool = False):
 
     if high_conf:
         lines.append("\n*⭐⭐⭐ High Confluence*")
-        for entry, conf in high_conf[:3]:
+        # Sort: portfolio stocks first
+        high_conf_sorted = sorted(high_conf[:5], key=lambda x: (0 if x[0]["_sym"] in PORTFOLIO else 1))
+        for entry, conf in high_conf_sorted[:3]:
             side = "🐂 CALL" if entry["type"] == "CALL" else "🐻 PUT"
             own = "  💼 *YOU OWN THIS*" if entry["_sym"] in PORTFOLIO else ""
             lines.append(f"{side} *{entry['_sym']}* ${entry['strike']:.0f} {entry['expiry']}  ⭐{entry['score']}  💰 ${entry['premium']//1000}K{own}")
