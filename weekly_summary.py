@@ -5,7 +5,7 @@ Reads the week's UNUSUAL_ALERTS from Google Sheets and sends a digest to Telegra
 import os, requests
 from datetime import datetime, timedelta
 from collections import Counter
-from sheets import _service, SHEET_ID
+from sheets import _service, SHEET_ID, _append, _ensure_tabs
 from notifier import send
 
 
@@ -210,6 +210,28 @@ def run_weekly_summary():
 
     send("\n".join(lines))
     print("✅ Weekly summary sent.")
+
+    # Store weekly report in WEEKLY_REPORTS sheet for historical tracking
+    try:
+        _ensure_tabs(svc, SHEET_ID, ["WEEKLY_REPORTS"])
+        # Add header if first time
+        existing = svc.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID, range="WEEKLY_REPORTS!A1"
+        ).execute()
+        if not existing.get("values"):
+            _append(svc, SHEET_ID, "WEEKLY_REPORTS", [["week_start", "date_saved", "total_alerts", "call_premium_k", "put_premium_k", "top_symbol", "summary"]])
+        _append(svc, SHEET_ID, "WEEKLY_REPORTS", [[
+            monday.strftime("%Y-%m-%d"),
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            len(week_rows),
+            total_call_k,
+            total_put_k,
+            sym_counts.most_common(1)[0][0] if sym_counts else "",
+            "\n".join(lines)[:5000]  # truncate to 5K chars for sheets
+        ]])
+        print("✅ Weekly report saved to WEEKLY_REPORTS sheet.")
+    except Exception as e:
+        print(f"  ⚠️ Could not save to sheets: {e}")
 
     # Cleanup: delete UNUSUAL_ALERTS rows older than 90 days (keep data fresh)
     try:
