@@ -531,13 +531,21 @@ def run_flow_trader():
     ).execute()
     already_traded = {row[1] for row in r_log.get("values", [])[1:]
                       if len(row) >= 2 and row[0] == today}
-    # Also block symbols with open positions (prevents duplicate legs)
+    # Block symbols with open positions (prevents duplicate legs)
     import re as _re
     open_pos = requests.get(f"{PAPER_BASE}/v2/positions",
         headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET}).json()
     if isinstance(open_pos, list):
         for p in open_pos:
             m = _re.match(r'([A-Z]+)', p['symbol'])
+            if m: already_traded.add(m.group(1))
+    # Also block symbols with PENDING orders (prevents race condition duplicates)
+    pending = requests.get(f"{PAPER_BASE}/v2/orders",
+        headers={"APCA-API-KEY-ID": PAPER_API_KEY, "APCA-API-SECRET-KEY": PAPER_API_SECRET},
+        params={"status": "open", "limit": 50}).json()
+    if isinstance(pending, list):
+        for o in pending:
+            m = _re.match(r'([A-Z]+)', o.get('symbol',''))
             if m: already_traded.add(m.group(1))
     if already_traded:
         print(f"  Already traded today: {already_traded}")
