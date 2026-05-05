@@ -48,7 +48,11 @@ else:
     PAPER_API_SECRET = os.environ.get("ALPACA_CSP_SECRET_KEY", os.environ.get("ALPACA_SECRET_KEY", ""))
     ACCOUNT_SIZE     = 101_000
     MAX_RISK_PER_TRADE = 2000  # 2% of $101K
-    TRADEABLE_SYMBOLS = None   # no filter on paper sandbox
+    # Same liquid symbols as $15K account — no point trading illiquid symbols
+    TRADEABLE_SYMBOLS = {
+        "SPY","QQQ","AAPL","NVDA","MSFT","AMZN","META","TSLA","GOOGL",
+        "AVGO","NFLX","UBER","CRM","AMD","PLTR","SOFI","COIN"
+    }
 
 TRADE_LOG_HEADERS = [
     "date", "symbol", "signal_type", "direction", "score",
@@ -417,8 +421,8 @@ def run_flow_trader():
         pass  # if clock fails, proceed anyway
 
     # Daily limits per account type
-    MAX_TRADES_PER_DAY = 2 if USE_10K_ACCOUNT else 5
-    MAX_OPEN_POSITIONS = 3 if USE_10K_ACCOUNT else 8
+    MAX_TRADES_PER_DAY = 2 if USE_10K_ACCOUNT else 3
+    MAX_OPEN_POSITIONS = 3 if USE_10K_ACCOUNT else 6
 
     svc = _service()
     _ensure_tabs(svc, SHEET_ID, [TRADE_LOG_TAB, "TRADE_RESULTS"])
