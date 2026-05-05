@@ -263,3 +263,21 @@ gh run view --log-failed <run_id> 2>&1 | grep "Error\|Traceback"
 ```bash
 python schwab_cli.py auth && python schwab_token_store.py save
 ```
+
+---
+
+## 2026-05-05 — Race condition: 3 simultaneous runs entered duplicate spreads
+
+**Symptom:** PLTR, TSLA, SPY, META had 2-3x duplicate spread legs. AAPL, AMZN, GOOGL, MSFT, NFLX had orphaned long puts with no short leg.
+
+**Root cause:** 3 GitHub Actions runs started at 13:32:16 simultaneously. All 3 checked positions (empty) and pending orders (empty) → all 3 passed dedup → all 3 entered the same spread.
+
+**Fix:** Added pending orders check to dedup:
+```python
+pending = requests.get(f"{PAPER_BASE}/v2/orders", ..., params={"status": "open"}).json()
+for o in pending: already_traded.add(underlying_symbol)
+```
+
+**Commit:** `438c4b2`
+
+**Note:** Alpaca paper trading cannot sell long puts (treats as new CSP, requires buying power). Orphaned long puts must expire. In live trading this works fine.
