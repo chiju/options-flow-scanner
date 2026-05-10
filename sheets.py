@@ -14,6 +14,8 @@ from googleapiclient.discovery import build
 
 SCOPES    = ["https://www.googleapis.com/auth/spreadsheets"]
 SHEET_ID  = os.environ.get("GOOGLE_OPTIONS_SHEET_ID", "1zhF6uyyoJpfbcjQvTqIQ11hbLQ17fO_4mKv1W5H4q8g")
+ALERTS_SHEET_ID  = os.environ.get("GOOGLE_ALERTS_SHEET_ID",  "1Lr9nkmFevaGM92Y-6QUylVaxx887MQkAkChrMevPwxw")
+SIGNALS_SHEET_ID = os.environ.get("GOOGLE_SIGNALS_SHEET_ID", "1i36sCRt6sPGI1Khd1tvgCr41GQrR0g3mDW_mBxRvoYI")
 
 SYMBOL_NAMES = {
     "SPY":"S&P 500","QQQ":"Nasdaq","IWM":"Russell 2000","GLD":"Gold","TLT":"Bonds",
@@ -284,7 +286,7 @@ def detect_signal_events(svc, sid: str, results: list) -> list:
 
     # ── 3. PERSISTENCE — contract seen 3+ days in UNUSUAL_ALERTS ──
     r2 = svc.spreadsheets().values().get(
-        spreadsheetId=sid, range="UNUSUAL_ALERTS!A:F"
+        spreadsheetId=ALERTS_SHEET_ID, range="UNUSUAL_ALERTS!A:F"
     ).execute()
     # Only use last 500 rows (3 days of data, ~150 alerts/day)
     alert_rows = r2.get("values", [])[1:][-500:]
@@ -407,7 +409,7 @@ def get_last_scan(svc, sid) -> dict:
 
     # Get last 100 rows of UNUSUAL_ALERTS for contract tracking
     r = svc.spreadsheets().values().get(
-        spreadsheetId=sid, range="UNUSUAL_ALERTS!A:F"
+        spreadsheetId=ALERTS_SHEET_ID, range="UNUSUAL_ALERTS!A:F"
     ).execute()
     rows = r.get("values", [])[1:][-100:]  # only last 100 rows needed
     if rows:
@@ -455,10 +457,67 @@ def compare_scans(current_results: list, previous: dict) -> list:
     return alerts
 
 
+ROTATE_THRESHOLD = 800   # keep this many rows; rotation triggers at 850
+ROTATE_TRIGGER   = 850   # trigger rotation when rows exceed this
+ROTATE_TABS = ["OI_SNAPSHOT", "SIGNAL_OUTCOMES", "EARNINGS_TRACKER", "FLOW_TRADE_LOG", "BRIEF_LOG"]  # tabs to auto-rotate on main sheet
+
+
+def rotate_tab(svc, sid: str, tab: str) -> bool:
+    """Keep last 200 rows when tab hits ROTATE_THRESHOLD. Returns True if rotated."""
+    r = svc.spreadsheets().values().get(spreadsheetId=sid, range=f"{tab}!A:A").execute()
+    row_count = len(r.get("values", [])) - 1  # exclude header
+    if row_count < ROTATE_TRIGGER:
+        return False
+
+    # Read all data
+    data = svc.spreadsheets().values().get(spreadsheetId=sid, range=f"{tab}!A:Z").execute()
+    all_rows = data.get("values", [])
+    if not all_rows:
+        return False
+
+    header = all_rows[0]
+    keep_rows = all_rows[-ROTATE_THRESHOLD:]  # keep last 800 data rows
+
+    # Get sheet numeric id
+    meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
+    sheet_id = next(s["properties"]["sheetId"] for s in meta["sheets"]
+                    if s["properties"]["title"] == tab)
+
+    # Delete all data rows (keep header)
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=sid,
+        body={"requests": [{"deleteDimension": {
+            "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                      "startIndex": 1, "endIndex": len(all_rows)}
+        }}]}
+    ).execute()
+
+    # Write back header + last 200 rows
+    svc.spreadsheets().values().update(
+        spreadsheetId=sid, range=f"{tab}!A1",
+        valueInputOption="RAW", body={"values": [header] + keep_rows}
+    ).execute()
+
+    print(f"  🔄 Rotated {tab}: kept last {ROTATE_THRESHOLD} of {row_count} rows")
+    return True
+
+
+def check_and_rotate(svc, sid: str):
+    """Check ROTATE_TABS and rotate any that hit ROTATE_THRESHOLD."""
+    for tab in ROTATE_TABS:
+        try:
+            rotate_tab(svc, sid, tab)
+        except Exception as e:
+            print(f"  ⚠️  Rotation check failed for {tab}: {e}")
+
+
 def store_results(results: list, prices: dict = None, price_changes: dict = None, fixed_symbols: set = None) -> list:
     try:
         svc = _service()
         sid = SHEET_ID
+
+        # Auto-rotate full tabs before writing new data
+        check_and_rotate(svc, sid)
 
         # Get previous scan BEFORE writing new data
         previous = get_last_scan(svc, sid)
@@ -551,17 +610,17 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
                     ])
 
         _upsert_tracker(svc, sid, tracker_rows)
-        _append(svc, sid, "UNUSUAL_ALERTS", alert_rows)
+        _append(svc, ALERTS_SHEET_ID, "UNUSUAL_ALERTS", alert_rows)
         print(f"  📊 Sheets: {len(alert_rows)} alerts | {len(tracker_rows)} tracker")
 
         # OI snapshot handled by oi_tracker.py (EOD only)
         oi_alerts = []
 
         # Detect and store signal events
-        _ensure_tabs(svc, sid, ["SIGNAL_HISTORY"])
+        _ensure_tabs(svc, SIGNALS_SHEET_ID, ["SIGNAL_HISTORY"])
         signal_events = detect_signal_events(svc, sid, results)
         if signal_events:
-            _append(svc, sid, "SIGNAL_HISTORY", signal_events)
+            _append(svc, SIGNALS_SHEET_ID, "SIGNAL_HISTORY", signal_events)
 
         momentum = compare_scans(results, previous)
         return momentum + oi_alerts + [
@@ -573,3 +632,12 @@ def store_results(results: list, prices: dict = None, price_changes: dict = None
     except Exception as e:
         print(f"  ⚠️  Sheets error: {e}")
         return []
+
+
+if __name__ == "__main__":
+    # CLI: python sheets.py rotate
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "rotate":
+        svc = _service()
+        check_and_rotate(svc, SHEET_ID)
+        print("Done.")
